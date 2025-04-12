@@ -1,0 +1,23 @@
+{gender, select,
+  male {
+    {numMessages, plural,
+      =0 {He has no messages.}
+      one {He has one message.}
+      other {He has # messages.}
+    }
+  }
+  female {
+    {numMessages, plural,
+      =0 {She has no messages.}
+      one {She has one message.}
+      other {She has # messages.}
+    }
+  }
+  other {
+    {numMessages, plural,
+      =0 {They have no messages.}
+      one {They have one message.}
+      other {They have # messages.}
+    }
+  }
+}
