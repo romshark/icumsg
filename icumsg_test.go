@@ -590,6 +590,7 @@ var TestsErrors = []TestError{
 	{"{x,plural,offset:a", 17, icumsg.ErrInvalidOffset},
 	{"{x,plural,offset:?, other{foo}}", 17, icumsg.ErrInvalidOffset},
 	{"{x,plural,offset:-1, other{foo}}", 17, icumsg.ErrInvalidOffset},
+	{"{x,plural,offset: , other{foo}}", 18, icumsg.ErrInvalidOffset},
 	// Expected opening bracket.
 	{"{x_, plural, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
