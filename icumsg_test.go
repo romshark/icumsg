@@ -545,8 +545,16 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
+	// Unclosed quote
+	{"prefix 'unclosed quote", 7, icumsg.ErrUnclosedQuote},
+	{"prefix '' 'unclosed quote", 10, icumsg.ErrUnclosedQuote},
+	{"prefix '{}' 'unclosed quote", 12, icumsg.ErrUnclosedQuote},
+	{"{x,plural, other { '{}' ' }}", 24, icumsg.ErrUnclosedQuote},
+	{"'", 0, icumsg.ErrUnclosedQuote},
+	{"", 1, icumsg.ErrUnexpectedToken},
 	// Unexpected token
 	{"{}", 1, icumsg.ErrUnexpectedToken},
+	{"{'}", 1, icumsg.ErrUnexpectedToken},
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
 	{"{n {}}", 3, icumsg.ErrUnexpectedToken},
 	{"{x, unknown}", 4, icumsg.ErrUnexpectedToken},

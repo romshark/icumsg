@@ -941,6 +941,7 @@ func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
 func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
 	start := t.pos
 	inQuote := false
+	quoteStart := start
 
 	for t.pos < len(t.s) {
 		b := t.s[t.pos]
@@ -951,6 +952,9 @@ func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
 				continue
 			}
 			inQuote = !inQuote
+			if inQuote {
+				quoteStart = t.pos
+			}
 			t.pos++
 			continue
 		}
@@ -963,6 +967,7 @@ func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
 	}
 
 	if inQuote {
+		t.pos = quoteStart // Rollback.
 		return buffer, ErrUnclosedQuote
 	}
 	if t.pos > start {
