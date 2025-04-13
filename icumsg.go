@@ -495,6 +495,7 @@ LOOP:
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
+	bracketOpen := t.pos
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
@@ -508,6 +509,7 @@ LOOP:
 			return buffer, ErrUnexpectedEOF
 		}
 		if t.s[t.pos] == '}' {
+			t.pos = bracketOpen // Rollback to begin of block.
 			return buffer, ErrEmptyOption
 		}
 		t.pos = afterOpeningBracket // Revert to before the lookahead.
@@ -540,23 +542,27 @@ LOOP:
 
 func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 	start := t.pos
-	if t.isEOF() {
-		return buffer, ErrUnexpectedEOF
-	}
-
 	tp := TokenTypeOptionNumber
 	var initiatorBufIndex int
 	numStart := t.pos
 	if t.s[t.pos] == '=' {
 		t.pos++ // Consume the equal sign.
 		digitsStart := t.pos
-		for ; t.pos < len(t.s) && t.s[t.pos] >= '0' && t.s[t.pos] <= '9'; t.pos++ {
+		for {
+			if t.isEOF() {
+				return buffer, ErrUnexpectedEOF
+			}
+			if t.s[t.pos] < '0' || t.s[t.pos] > '9' {
+				break
+			}
+			t.pos++
 		}
 		if digitsStart == t.pos {
 			return buffer, ErrInvalidOption // '=' not followed by digits.
 		}
 		option := t.s[start:t.pos]
 		if len(option) > 2 && option[1] == '0' {
+			t.pos = start
 			return buffer, ErrInvalidOption // Leading zero is illegal.
 		}
 	} else {
@@ -611,6 +617,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
+	bracketOpen := t.pos
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
@@ -623,6 +630,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 			return buffer, ErrUnexpectedEOF
 		}
 		if t.s[t.pos] == '}' {
+			t.pos = bracketOpen // Rollback to begin of block.
 			return buffer, ErrEmptyOption
 		}
 		t.pos = afterOpeningBracket // Revert to before the lookahead.

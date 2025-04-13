@@ -523,6 +523,10 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd ", 23, icumsg.ErrUnexpectedEOF},
 	{"{x,plural, other { asd }", 24, icumsg.ErrUnexpectedEOF},
 	{"{x,plural, other { asd } ", 25, icumsg.ErrUnexpectedEOF},
+	{"{x,plural, other { asd } =", 26, icumsg.ErrUnexpectedEOF},
+	// Invalid option
+	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
+	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	// Unexpected token
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
 	{"{x, unknown}", 4, icumsg.ErrUnexpectedToken},
@@ -538,10 +542,15 @@ var TestsErrors = []TestError{
 	{"{x_, plural, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
+	{"{x,plural, other { asd } =1a {x} }", 27, icumsg.ErrExpectBracketOpen},
+	{"{x,plural, other { asd } =1? {x} }", 27, icumsg.ErrExpectBracketOpen},
 	// Expected closing bracket.
 	{"{n, number, integer, foobar}", 19, icumsg.ErrExpectBracketClose},
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
-	// Duplicate option
+	// Empty option
+	{"{x,plural, other { } }", 17, icumsg.ErrEmptyOption},
+	{"{x,plural, one {x} other {} }", 25, icumsg.ErrEmptyOption},
+	// Duplicate option in plural
 	{"{n, plural, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
@@ -551,7 +560,7 @@ var TestsErrors = []TestError{
 	{"{n, plural, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =1{c} =0{d}}", 33, icumsg.ErrDuplicateOption},
-
+	// Duplicate option in selectordinal
 	{"{n, selectordinal, other{a} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} one{b} other{c}}", 35, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} zero{b} zero{c}}", 36, icumsg.ErrDuplicateOption},
@@ -559,7 +568,9 @@ var TestsErrors = []TestError{
 	{"{n, selectordinal, other{a} two{b} two{c}}", 35, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} few{b} few{c}}", 35, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} many{b} many{c}}", 36, icumsg.ErrDuplicateOption},
-
+	{"{n, selectordinal, other{a} =0{b} =0{c}}", 34, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} =0{b} =1{c} =0{d}}", 40, icumsg.ErrDuplicateOption},
+	// Duplicate option in select
 	{"{n, select, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
@@ -567,7 +578,6 @@ var TestsErrors = []TestError{
 	{"{n, select, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
-
 	// Missing option 'other'
 	{"before {x, select, one{a}}", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
