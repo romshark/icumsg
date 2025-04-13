@@ -5,7 +5,7 @@
     <img src="https://goreportcard.com/badge/github.com/romshark/icumsg" alt="GoReportCard">
 </a>
 <a href='https://coveralls.io/github/romshark/icumsg?branch=main'>
-    <img src='https://coveralls.io/repos/github/romshark/icumsg/badge.svg?branch=main' alt='Coverage Status' />
+    <img src='https://coveralls.io/repos/github/romshark/icumsg/badge.svg?branch=main&service=github' alt='Coverage Status' />
 </a>
 
 # icumsg
