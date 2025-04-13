@@ -213,11 +213,6 @@ func indexOfArgNameEnd(s string, i int) int {
 }
 
 func (t *Tokenizer) consumeArgument(buffer []Token) ([]Token, error) {
-	if t.s[t.pos] != '{' {
-		// Unexpected non-literal non-argument input.
-		return buffer, ErrExpectBracketOpen
-	}
-
 	start := t.pos
 	t.pos++ // Consume the '{'.
 
