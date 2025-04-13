@@ -454,10 +454,6 @@ var ErrInvalidOption = errors.New("invalid plural option")
 
 func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	start := t.pos
-	if t.isEOF() {
-		return buffer, ErrUnexpectedEOF
-	}
-
 	var initiatorBufIndex int
 	tp := TokenTypeOption
 
