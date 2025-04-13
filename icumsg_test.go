@@ -526,6 +526,8 @@ var TestsErrors = []TestError{
 	{"{x,plural,offset:", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset: ", 18, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset:1", 18, icumsg.ErrUnexpectedEOF},
+	{"{x,plural,offset:1,", 19, icumsg.ErrUnexpectedEOF},
+	{"{x,plural,offset:1, ", 20, icumsg.ErrUnexpectedEOF},
 	{"{x,plural", 9, icumsg.ErrUnexpectedEOF},
 	{"{x,plural ", 10, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,", 10, icumsg.ErrUnexpectedEOF},
@@ -541,6 +543,7 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } =", 26, icumsg.ErrUnexpectedEOF},
 	// Invalid option
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
+	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	// Unexpected token
 	{"{}", 1, icumsg.ErrUnexpectedToken},
