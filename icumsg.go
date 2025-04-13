@@ -235,6 +235,11 @@ func (t *Tokenizer) consumeArgument(buffer []Token) ([]Token, error) {
 	switch t.s[t.pos] {
 	case '}':
 		// Simple argument.
+
+		if startName == endName {
+			return buffer, ErrUnexpectedToken
+		}
+
 		t.pos++ // Consume the '}'.
 		buffer = append(buffer, Token{
 			IndexStart: start,

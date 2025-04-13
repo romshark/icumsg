@@ -531,13 +531,16 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	// Unexpected token
+	{"{}", 1, icumsg.ErrUnexpectedToken},
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
+	{"{n {}}", 3, icumsg.ErrUnexpectedToken},
 	{"{x, unknown}", 4, icumsg.ErrUnexpectedToken},
 	{"{x: plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
 	{"{x| plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
 	{"{x? plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
 	{"{x__? plural, other{x}}", 4, icumsg.ErrUnexpectedToken},
 	{"{x_, unknown, other{x}}", 5, icumsg.ErrUnexpectedToken},
+	{"{x,plural,other{{}}}", 17, icumsg.ErrUnexpectedToken},
 	// Expected comma.
 	{"{x_, plural: other{x}}", 11, icumsg.ErrExpectedComma},
 	{"{x_, plural | other{x}}", 12, icumsg.ErrExpectedComma},
@@ -611,6 +614,7 @@ func TestTokenizeErr(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			buffer = buffer[:0]
 			_, err := tokenizer.Tokenize(buffer, tt.Input)
+			t.Logf("input: %q", tt.Input)
 			requireErrIs(t, tt.ExpectErr, err)
 			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
 		})
