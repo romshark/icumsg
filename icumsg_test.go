@@ -642,6 +642,9 @@ var TestsErrors = []TestError{
 	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
 	// Missing option 'other'.
+	{"prefix {x,plural, }", 7, icumsg.ErrMissingOptionOther},
+	{"prefix {x,select, }", 7, icumsg.ErrMissingOptionOther},
+	{"prefix {x,selectordinal, }", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, one{a}}", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, x{a} y{b}}", 7, icumsg.ErrMissingOptionOther},

@@ -152,7 +152,6 @@ var (
 	ErrExpectedColon      = errors.New("expected colon")
 	ErrExpectBracketOpen  = errors.New("expect opening bracket")
 	ErrExpectBracketClose = errors.New("expect closing bracket")
-	ErrMissingOptions     = errors.New("mission options")
 	ErrMissingOptionOther = errors.New("missing the mandatory 'other' option")
 	ErrEmptyOption        = errors.New("empty option")
 	ErrDuplicateOption    = errors.New("duplicate option")
@@ -411,8 +410,6 @@ func (t *Tokenizer) consumeSelectArg(
 		IndexEnd:   endName,
 		Type:       TokenTypeArgName,
 	})
-	startOptions := t.pos
-	numOptions := 0
 	for {
 		t.skipWhitespaces()
 		if t.isEOF() {
@@ -428,12 +425,6 @@ func (t *Tokenizer) consumeSelectArg(
 		if err != nil {
 			return buffer, err
 		}
-		numOptions++
-	}
-
-	if numOptions < 1 {
-		t.pos = startOptions // Rollback.
-		return buffer, ErrMissingOptions
 	}
 
 	// +2 to skip [plural,argName]
@@ -683,8 +674,6 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		IndexEnd:   endName,
 		Type:       TokenTypeArgName,
 	})
-	startOptions := t.pos
-	numOptions := 0
 	for {
 		t.skipWhitespaces()
 		if t.isEOF() {
@@ -700,12 +689,6 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		if err != nil {
 			return buffer, err
 		}
-		numOptions++
-	}
-
-	if numOptions < 1 {
-		t.pos = startOptions // Rollback.
-		return buffer, ErrMissingOptions
 	}
 
 	// +2 to skip [plural,argName]
@@ -780,8 +763,6 @@ func (t *Tokenizer) consumePluralArg(
 			t.skipWhitespaces()
 		}
 	}
-	startOptions := t.pos
-	numOptions := 0
 	for {
 		t.skipWhitespaces()
 		if t.isEOF() {
@@ -797,12 +778,6 @@ func (t *Tokenizer) consumePluralArg(
 		if err != nil {
 			return buffer, err
 		}
-		numOptions++
-	}
-
-	if numOptions < 1 {
-		t.pos = startOptions // Rollback.
-		return buffer, ErrMissingOptions
 	}
 
 	// +2 to skip [plural,argName]
