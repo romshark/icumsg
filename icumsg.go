@@ -449,21 +449,14 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	var initiatorBufIndex int
 	tp := TokenTypeOption
 
-LOOP:
-	for ; t.pos < len(t.s); t.pos++ {
-		b := t.s[t.pos]
-		switch b {
-		case '{', '}', ',', ' ', '\t', '\n', '\r':
-			if t.s[start:t.pos] == "other" {
-				tp = TokenTypeOptionOther
-			}
-			break LOOP
-		}
-	}
-
-	if t.pos == start {
+	end := indexOfArgNameEnd(t.s, t.pos)
+	if start == end {
 		return buffer, ErrInvalidOption
 	}
+	if t.s[start:end] == "other" {
+		tp = TokenTypeOptionOther
+	}
+	t.pos = end
 
 	initiatorBufIndex = len(buffer)
 	buffer = append(buffer, Token{

@@ -524,7 +524,9 @@ var TestsErrors = []TestError{
 	{"{x,select, other { asd ", 23, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other { asd }", 24, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other { asd } ", 25, icumsg.ErrUnexpectedEOF},
-	{"{x,select, other { asd } =", 26, icumsg.ErrUnexpectedEOF},
+	{"{x,select", 9, icumsg.ErrUnexpectedEOF},
+	{"{x,plural", 9, icumsg.ErrUnexpectedEOF},
+	{"{x,selectordinal", 16, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal, other", 23, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal, other ", 24, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal, other {", 25, icumsg.ErrUnexpectedEOF},
@@ -555,10 +557,12 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } ", 25, icumsg.ErrUnexpectedEOF},
 	{"{x,plural, other { asd } =", 26, icumsg.ErrUnexpectedEOF},
 	// Invalid option
+	{"{x,select, other { asd } {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, offset:0x1 other{foo}}", 19, icumsg.ErrInvalidOption},
+	{"{x,select, other { asd } =1 {x} }", 25, icumsg.ErrInvalidOption},
 	// Unclosed quote
 	{"prefix 'unclosed quote", 7, icumsg.ErrUnclosedQuote},
 	{"prefix '' 'unclosed quote", 10, icumsg.ErrUnclosedQuote},
