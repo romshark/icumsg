@@ -156,6 +156,7 @@ var (
 	ErrMissingOptionOther = errors.New("missing the mandatory 'other' option")
 	ErrEmptyOption        = errors.New("empty option")
 	ErrDuplicateOption    = errors.New("duplicate option")
+	ErrInvalidOffset      = errors.New("invalid offset")
 )
 
 // String returns a slice of the input string token t represents.
@@ -927,6 +928,10 @@ func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
 	for ; t.pos < len(t.s); t.pos++ {
 		if t.s[t.pos] < '0' || t.s[t.pos] > '9' {
 			// End of number.
+			if start == t.pos {
+				return buffer, ErrInvalidOffset
+			}
+
 			buffer = append(buffer, Token{
 				IndexStart: start,
 				IndexEnd:   t.pos,

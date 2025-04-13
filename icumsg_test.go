@@ -344,6 +344,19 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
+	{ // Select offset zero
+		full := `{x,plural,offset:0,other{o}}`
+		f(t, full, []Token{
+			{Str: full, Type: icumsg.TokenTypePlural},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "0", Type: icumsg.TokenTypePluralOffset},
+			{Str: "other{o}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "o", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{o}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
 	{ // Select offset no comma
 		full := `{ x , plural , offset : 3 other{o}}`
 		f(t, full, []Token{
@@ -545,16 +558,17 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
+	{"{x,plural, offset:0x1 other{foo}}", 19, icumsg.ErrInvalidOption},
 	// Unclosed quote
 	{"prefix 'unclosed quote", 7, icumsg.ErrUnclosedQuote},
 	{"prefix '' 'unclosed quote", 10, icumsg.ErrUnclosedQuote},
 	{"prefix '{}' 'unclosed quote", 12, icumsg.ErrUnclosedQuote},
 	{"{x,plural, other { '{}' ' }}", 24, icumsg.ErrUnclosedQuote},
 	{"'", 0, icumsg.ErrUnclosedQuote},
-	{"", 1, icumsg.ErrUnexpectedToken},
-	// Unexpected token
+	// Unexpected token.
 	{"{}", 1, icumsg.ErrUnexpectedToken},
 	{"{'}", 1, icumsg.ErrUnexpectedToken},
+	{"{?}", 1, icumsg.ErrUnexpectedToken},
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
 	{"{n {}}", 3, icumsg.ErrUnexpectedToken},
 	{"{x, unknown}", 4, icumsg.ErrUnexpectedToken},
@@ -572,6 +586,10 @@ var TestsErrors = []TestError{
 	{"{x_, plural | other{x}}", 12, icumsg.ErrExpectedComma},
 	{"{x, select: other{x}}", 10, icumsg.ErrExpectedComma},
 	{"{x, selectordinal: other{x}}", 17, icumsg.ErrExpectedComma},
+	// Invalid offset.
+	{"{x,plural,offset:a", 17, icumsg.ErrInvalidOffset},
+	{"{x,plural,offset:?, other{foo}}", 17, icumsg.ErrInvalidOffset},
+	{"{x,plural,offset:-1, other{foo}}", 17, icumsg.ErrInvalidOffset},
 	// Expected opening bracket.
 	{"{x_, plural, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
@@ -583,7 +601,7 @@ var TestsErrors = []TestError{
 	// Expected closing bracket.
 	{"{n, number, integer, foobar}", 19, icumsg.ErrExpectBracketClose},
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
-	// Empty option
+	// Empty option.
 	{"{x,plural, other { } }", 17, icumsg.ErrEmptyOption},
 	{"{x,plural, one {x} other {} }", 25, icumsg.ErrEmptyOption},
 	{"{x,selectordinal, one {x} other {} }", 32, icumsg.ErrEmptyOption},
@@ -594,7 +612,7 @@ var TestsErrors = []TestError{
 		"{x,selectordinal, one {x} other {{y,select,other{}} } }",
 		48, icumsg.ErrEmptyOption,
 	},
-	// Duplicate option in plural
+	// Duplicate option in plural.
 	{"{n, plural, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
@@ -604,7 +622,7 @@ var TestsErrors = []TestError{
 	{"{n, plural, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =1{c} =0{d}}", 33, icumsg.ErrDuplicateOption},
-	// Duplicate option in selectordinal
+	// Duplicate option in selectordinal.
 	{"{n, selectordinal, other{a} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} one{b} other{c}}", 35, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} zero{b} zero{c}}", 36, icumsg.ErrDuplicateOption},
@@ -614,7 +632,7 @@ var TestsErrors = []TestError{
 	{"{n, selectordinal, other{a} many{b} many{c}}", 36, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} =0{b} =0{c}}", 34, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} =0{b} =1{c} =0{d}}", 40, icumsg.ErrDuplicateOption},
-	// Duplicate option in select
+	// Duplicate option in select.
 	{"{n, select, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
@@ -622,7 +640,7 @@ var TestsErrors = []TestError{
 	{"{n, select, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
-	// Missing option 'other'
+	// Missing option 'other'.
 	{"before {x, select, one{a}}", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
 	{"before {x, select, x{a} y{b}}", 7, icumsg.ErrMissingOptionOther},
