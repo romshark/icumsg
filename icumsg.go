@@ -153,7 +153,9 @@ var (
 	ErrExpectBracketOpen  = errors.New("expect opening bracket")
 	ErrExpectBracketClose = errors.New("expect closing bracket")
 	ErrMissingOptions     = errors.New("mission options")
+	ErrMissingOptionOther = errors.New("missing the mandatory 'other' option")
 	ErrEmptyOption        = errors.New("empty option")
+	ErrDuplicateOption    = errors.New("duplicate option")
 )
 
 // String returns a slice of the input string token t represents.
@@ -432,8 +434,11 @@ func (t *Tokenizer) consumeSelectArg(
 		t.pos = startOptions // Rollback.
 		return buffer, ErrMissingOptions
 	}
-	// TODO: check duplicate options.
-	// TODO: make sure mandatory other option is present.
+
+	// +2 to skip [plural,argName]
+	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
+		return buffer, err
+	}
 
 	// Link the argument initiator to the argument terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
@@ -475,7 +480,7 @@ LOOP:
 	initiatorBufIndex = len(buffer)
 	buffer = append(buffer, Token{
 		IndexStart: start,
-		IndexEnd:   0, // Set later.
+		IndexEnd:   0, // Set later to terminator buffer index.
 		Type:       tp,
 	})
 	if tp == TokenTypeOption {
@@ -541,6 +546,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 
 	tp := TokenTypeOptionNumber
 	var initiatorBufIndex int
+	numStart := t.pos
 	if t.s[t.pos] == '=' {
 		t.pos++ // Consume the equal sign.
 		digitsStart := t.pos
@@ -590,9 +596,16 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 	initiatorBufIndex = len(buffer)
 	buffer = append(buffer, Token{
 		IndexStart: start,
-		IndexEnd:   0, // Set later.
+		IndexEnd:   0, // Set later to terminator buffer index.
 		Type:       tp,
 	})
+	if tp == TokenTypeOptionNumber {
+		buffer = append(buffer, Token{
+			IndexStart: numStart,
+			IndexEnd:   t.pos,
+			Type:       TokenTypeOptionName,
+		})
+	}
 
 	t.skipWhitespaces()
 	if t.isEOF() {
@@ -689,9 +702,13 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		t.pos = startOptions // Rollback.
 		return buffer, ErrMissingOptions
 	}
-	// TODO: check duplicate options.
+
+	// +2 to skip [plural,argName]
+	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
+		return buffer, err
+	}
+
 	// TODO: check illegal options relative to the selected base lang.
-	// TODO: make sure mandatory other option is present.
 
 	// Link the argument initiator to the argument terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
@@ -782,7 +799,11 @@ func (t *Tokenizer) consumePluralArg(
 		t.pos = startOptions // Rollback.
 		return buffer, ErrMissingOptions
 	}
-	// TODO: check duplicate options
+
+	// +2 to skip [plural,argName]
+	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
+		return buffer, err
+	}
 	// TODO: check illegal options relative to the selected base lang.
 
 	// Link the argument initiator to the argument terminator.
@@ -793,6 +814,90 @@ func (t *Tokenizer) consumePluralArg(
 		Type:       TokenTypeComplexArgTerm,
 	})
 	return buffer, nil
+}
+
+func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) error {
+	var zero, one, two, few, many, other bool
+	for i := bufIndex; i < len(buffer); i++ {
+		outer := buffer[i]
+		switch outer.Type {
+		case TokenTypeOptionZero:
+			if zero {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			zero = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionOne:
+			if one {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			one = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionTwo:
+			if two {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			two = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionFew:
+			if few {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			few = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionMany:
+			if many {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			many = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionOther:
+			if other {
+				t.pos = outer.IndexStart
+				return ErrDuplicateOption
+			}
+			other = true
+			i = outer.IndexEnd // Skip contents.
+		case TokenTypeOptionNumber, TokenTypeOption:
+			nameToken := buffer[i+1]
+			name := t.s[nameToken.IndexStart:nameToken.IndexEnd]
+			// Check each other option.
+			for j := bufIndex; j < len(buffer); j++ {
+				inner := buffer[j]
+				if j == i {
+					continue
+				}
+				switch inner.Type {
+				case outer.Type:
+					j++ // Skip the option and go straight to name.
+					inner = buffer[j]
+					inr := t.s[inner.IndexStart:inner.IndexEnd]
+					if name == inr {
+						t.pos = inner.IndexStart
+						return ErrDuplicateOption
+					}
+				case TokenTypeOptionZero,
+					TokenTypeOptionOne,
+					TokenTypeOptionTwo,
+					TokenTypeOptionFew,
+					TokenTypeOptionMany,
+					TokenTypeOptionOther:
+					j = inner.IndexEnd // Skip contents.
+				}
+			}
+			i = outer.IndexEnd // Skip contents.
+		}
+	}
+	if !other {
+		t.pos = startArg // Rollback.
+		return ErrMissingOptionOther
+	}
+	return nil
 }
 
 func isWhitespace(b byte) bool {

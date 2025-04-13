@@ -424,6 +424,7 @@ func TestTokenize(t *testing.T) {
 			{Str: "numMessages", Type: icumsg.TokenTypeArgName},
 			// gender=male; numMessages=0
 			{Str: maleEq0, Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
 			{Str: "У нього немає повідомлень.", Type: icumsg.TokenTypeLiteral},
 			{Str: maleEq0, Type: icumsg.TokenTypeOptionTerm},
 			// gender=male; numMessages=one
@@ -444,6 +445,7 @@ func TestTokenize(t *testing.T) {
 			{Str: "numMessages", Type: icumsg.TokenTypeArgName},
 			// gender=female; numMessages=0
 			{Str: femaleEq0, Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
 			{Str: "У неї немає повідомлень.", Type: icumsg.TokenTypeLiteral},
 			{Str: femaleEq0, Type: icumsg.TokenTypeOptionTerm},
 			// gender=female; numMessages=one
@@ -463,6 +465,7 @@ func TestTokenize(t *testing.T) {
 			{Str: "numMessages", Type: icumsg.TokenTypeArgName},
 			// gender=other; numMessages=0
 			{Str: otherEq0, Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
 			{Str: "У них немає повідомлень.", Type: icumsg.TokenTypeLiteral},
 			{Str: otherEq0, Type: icumsg.TokenTypeOptionTerm},
 			// gender=other; numMessages=one
@@ -538,6 +541,41 @@ var TestsErrors = []TestError{
 	// Expected closing bracket.
 	{"{n, number, integer, foobar}", 19, icumsg.ErrExpectBracketClose},
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
+	// Duplicate option
+	{"{n, plural, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} one{b} one{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} =0{b} =0{c}}", 27, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} =0{b} =1{c} =0{d}}", 33, icumsg.ErrDuplicateOption},
+
+	{"{n, selectordinal, other{a} other{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} one{b} other{c}}", 35, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} zero{b} zero{c}}", 36, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} one{b} one{c}}", 35, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} two{b} two{c}}", 35, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} few{b} few{c}}", 35, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} many{b} many{c}}", 36, icumsg.ErrDuplicateOption},
+
+	{"{n, select, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} zero{b} zero{c}}", 29, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} one{b} one{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
+	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
+
+	// Missing option 'other'
+	{"before {x, select, one{a}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {x, select, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {x, select, x{a} y{b}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {n, plural, one{a}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {n, plural, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {n, selectordinal, one{a}}", 7, icumsg.ErrMissingOptionOther},
+	{"before {n, selectordinal, one{a} two{b}}", 7, icumsg.ErrMissingOptionOther},
 }
 
 func TestTokenizeErr(t *testing.T) {
