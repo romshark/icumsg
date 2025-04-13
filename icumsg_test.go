@@ -506,6 +506,9 @@ var TestsErrors = []TestError{
 	{"{x,select", 9, icumsg.ErrUnexpectedEOF},
 	{"{x,select ,", 11, icumsg.ErrUnexpectedEOF},
 	{"{x,select , ", 12, icumsg.ErrUnexpectedEOF},
+	{"{x,select , o", 13, icumsg.ErrUnexpectedEOF},
+	{"{x,select , o ", 14, icumsg.ErrUnexpectedEOF},
+	{"{x,select , o{", 14, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal", 16, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal ", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal ,", 18, icumsg.ErrUnexpectedEOF},
@@ -544,12 +547,22 @@ var TestsErrors = []TestError{
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
 	{"{x,plural, other { asd } =1a {x} }", 27, icumsg.ErrExpectBracketOpen},
 	{"{x,plural, other { asd } =1? {x} }", 27, icumsg.ErrExpectBracketOpen},
+	{"{x_, selectordinal, other, one{x} }", 25, icumsg.ErrExpectBracketOpen},
+	{"{x_, select, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	// Expected closing bracket.
 	{"{n, number, integer, foobar}", 19, icumsg.ErrExpectBracketClose},
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
 	// Empty option
 	{"{x,plural, other { } }", 17, icumsg.ErrEmptyOption},
 	{"{x,plural, one {x} other {} }", 25, icumsg.ErrEmptyOption},
+	{"{x,selectordinal, one {x} other {} }", 32, icumsg.ErrEmptyOption},
+	{"{x,select, one {x} other {} }", 25, icumsg.ErrEmptyOption},
+	{"{x,select, one {x} other {{y,select,other{}} } }", 41, icumsg.ErrEmptyOption},
+	{"{x,plural, one {x} other {{y,select,other{}} } }", 41, icumsg.ErrEmptyOption},
+	{
+		"{x,selectordinal, one {x} other {{y,select,other{}} } }",
+		48, icumsg.ErrEmptyOption,
+	},
 	// Duplicate option in plural
 	{"{n, plural, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
