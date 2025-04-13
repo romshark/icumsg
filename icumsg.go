@@ -571,10 +571,6 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 			}
 		}
 
-		if t.pos == start {
-			return buffer, ErrInvalidOption
-		}
-
 		option := t.s[start:t.pos]
 		switch option {
 		case "zero":

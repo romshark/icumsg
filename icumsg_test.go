@@ -560,6 +560,7 @@ var TestsErrors = []TestError{
 	{"{x,select, other { asd } {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
+	{"{x,plural, other { asd } ?{x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, offset:0x1 other{foo}}", 19, icumsg.ErrInvalidOption},
 	{"{x,select, other { asd } =1 {x} }", 25, icumsg.ErrInvalidOption},
