@@ -544,6 +544,8 @@ var TestsErrors = []TestError{
 	// Expected comma.
 	{"{x_, plural: other{x}}", 11, icumsg.ErrExpectedComma},
 	{"{x_, plural | other{x}}", 12, icumsg.ErrExpectedComma},
+	{"{x, select: other{x}}", 10, icumsg.ErrExpectedComma},
+	{"{x, selectordinal: other{x}}", 17, icumsg.ErrExpectedComma},
 	// Expected opening bracket.
 	{"{x_, plural, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	{"{x_, plural, other , one{x} }", 19, icumsg.ErrExpectBracketOpen},
