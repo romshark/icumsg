@@ -187,7 +187,15 @@ func (t *Tokenizer) Tokenize(buffer []Token, s string) ([]Token, error) {
 		}), nil
 	}
 
-	return t.consumeExpr(buffer)
+	var err error
+	buffer, err = t.consumeExpr(buffer)
+	if err != nil {
+		return buffer, err
+	}
+	if t.pos != len(s) {
+		return buffer, ErrUnexpectedToken
+	}
+	return buffer, nil
 }
 
 func (t *Tokenizer) consumeExpr(buffer []Token) ([]Token, error) {

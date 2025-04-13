@@ -571,6 +571,9 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { '{}' ' }}", 24, icumsg.ErrUnclosedQuote},
 	{"'", 0, icumsg.ErrUnclosedQuote},
 	// Unexpected token.
+	{"}", 0, icumsg.ErrUnexpectedToken},
+	{"prefix }", 7, icumsg.ErrUnexpectedToken},
+	{"prefix } suffix", 7, icumsg.ErrUnexpectedToken},
 	{"{}", 1, icumsg.ErrUnexpectedToken},
 	{"{'}", 1, icumsg.ErrUnexpectedToken},
 	{"{?}", 1, icumsg.ErrUnexpectedToken},
@@ -583,6 +586,7 @@ var TestsErrors = []TestError{
 	{"{x__? plural, other{x}}", 4, icumsg.ErrUnexpectedToken},
 	{"{x_, unknown, other{x}}", 5, icumsg.ErrUnexpectedToken},
 	{"{x,plural,other{{}}}", 17, icumsg.ErrUnexpectedToken},
+	{"{n, plural, other{x} }}", 22, icumsg.ErrUnexpectedToken},
 	// Expected colon.
 	{"{x,plural,offset,", 16, icumsg.ErrExpectedColon},
 	{"{x,plural,offset ,", 17, icumsg.ErrExpectedColon},
