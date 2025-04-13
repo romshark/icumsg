@@ -930,12 +930,51 @@ func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
 	return buffer, nil
 }
 
+var endOfLiteral = [256]bool{'\'': true, '{': true, '}': true}
+
 func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
 	start := t.pos
 	inQuote := false
 	quoteStart := start
 
 	for t.pos < len(t.s) {
+		if t.pos+8 < len(t.s) {
+			if endOfLiteral[t.s[t.pos]] {
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+1]] {
+				t.pos++
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+2]] {
+				t.pos += 2
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+3]] {
+				t.pos += 3
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+4]] {
+				t.pos += 4
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+5]] {
+				t.pos += 5
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+6]] {
+				t.pos += 6
+				goto CHECK
+			}
+			if endOfLiteral[t.s[t.pos+7]] {
+				t.pos += 7
+				goto CHECK
+			}
+			t.pos += 8
+			continue
+		}
+
+	CHECK:
 		b := t.s[t.pos]
 		if b == '\'' {
 			// Lookahead for escaped quote
