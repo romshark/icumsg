@@ -172,6 +172,21 @@ func (t Token) String(s string, buffer []Token) string {
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.
 func (t *Tokenizer) Tokenize(buffer []Token, s string) ([]Token, error) {
 	t.s, t.pos = s, 0 // Reset tokenizer.
+
+	if s == "" {
+		return buffer, nil
+	}
+	if strings.IndexByte(s, '\'') == -1 &&
+		strings.IndexByte(s, '{') == -1 &&
+		strings.IndexByte(s, '}') == -1 {
+		// Fast path for simple inputs.
+		return append(buffer, Token{
+			IndexStart: 0,
+			IndexEnd:   len(s),
+			Type:       TokenTypeLiteral,
+		}), nil
+	}
+
 	return t.consumeExpr(buffer)
 }
 
