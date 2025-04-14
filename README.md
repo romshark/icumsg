@@ -17,20 +17,21 @@ tokenizer.
 https://go.dev/play/p/uNHO3Gt128Z
 
 ```go
-package main
+package icumsg_test
 
 import (
 	"fmt"
 	"os"
 
 	"github.com/romshark/icumsg"
+	"golang.org/x/text/language"
 )
 
-func main() {
+func ExampleTokenizer() {
 	msg := `Hello {arg} ({rank, ordinal})!`
 
 	var tokenizer icumsg.Tokenizer
-	tokens, err := tokenizer.Tokenize(nil, msg)
+	tokens, err := tokenizer.Tokenize(language.English, nil, msg)
 	if err != nil {
 		fmt.Printf("ERR: at index %d: %v\n", tokenizer.Pos(), err)
 		os.Exit(1)

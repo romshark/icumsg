@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/romshark/icumsg"
+	"golang.org/x/text/language"
 )
 
 func requireEqual[T comparable](tb testing.TB, expect, actual T) {
@@ -126,97 +127,97 @@ func TestTokenize(t *testing.T) {
 
 	var tokenizer icumsg.Tokenizer
 	var buffer []icumsg.Token
-	f := func(t *testing.T, input string, expect ...Token) {
+	f := func(t *testing.T, locale language.Tag, input string, expect ...Token) {
 		t.Helper()
 		buffer = buffer[:0]
-		buffer, err := tokenizer.Tokenize(buffer, input)
+		buffer, err := tokenizer.Tokenize(locale, buffer, input)
 		requireNoErr(t, err)
 		actual := ToTestTokens(input, buffer)
 		compareTokens(t, expect, actual)
 	}
 
-	f(t, "")
-	f(t, "foo", []Token{
+	f(t, language.English, "")
+	f(t, language.English, "foo", []Token{
 		{Str: "foo", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "foo bar\n\tbazz", []Token{
+	f(t, language.English, "foo bar\n\tbazz", []Token{
 		{Str: "foo bar\n\tbazz", Type: icumsg.TokenTypeLiteral},
 	}...)
 
 	// Escaping
-	f(t, "''", []Token{
+	f(t, language.English, "''", []Token{
 		{Str: "''", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "'{}' '{}'", []Token{
+	f(t, language.English, "'{}' '{}'", []Token{
 		{Str: "'{}' '{}'", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "before '{x '' y}' after", []Token{
+	f(t, language.English, "before '{x '' y}' after", []Token{
 		{Str: "before '{x '' y}' after", Type: icumsg.TokenTypeLiteral},
 	}...)
 
 	// Argument
-	f(t, "{_}", []Token{
+	f(t, language.English, "{_}", []Token{
 		{Str: "{_}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "_", Type: icumsg.TokenTypeArgName},
 	}...)
-	f(t, "{1}", []Token{
+	f(t, language.English, "{1}", []Token{
 		{Str: "{1}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "1", Type: icumsg.TokenTypeArgName},
 	}...)
-	f(t, "{arg}", []Token{
+	f(t, language.English, "{arg}", []Token{
 		{Str: "{arg}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 	}...)
-	f(t, "{аргумент}", []Token{
+	f(t, language.English, "{аргумент}", []Token{
 		{Str: "{аргумент}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "аргумент", Type: icumsg.TokenTypeArgName},
 	}...)
-	f(t, "{ arg }", []Token{
+	f(t, language.English, "{ arg }", []Token{
 		{Str: "{ arg }", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 	}...)
-	f(t, "{\n arg \n}", []Token{
+	f(t, language.English, "{\n arg \n}", []Token{
 		{Str: "{\n arg \n}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 	}...)
 
 	// Argument type
-	f(t, "Before {arg, number} after", []Token{
+	f(t, language.English, "Before {arg, number} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, date} after", []Token{
+	f(t, language.English, "Before {arg, date} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, date}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 		{Str: "date", Type: icumsg.TokenTypeArgTypeDate},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, time} after", []Token{
+	f(t, language.English, "Before {arg, time} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, time}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 		{Str: "time", Type: icumsg.TokenTypeArgTypeTime},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, spellout} after", []Token{
+	f(t, language.English, "Before {arg, spellout} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, spellout}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 		{Str: "spellout", Type: icumsg.TokenTypeArgTypeSpellout},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, ordinal} after", []Token{
+	f(t, language.English, "Before {arg, ordinal} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, ordinal}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 		{Str: "ordinal", Type: icumsg.TokenTypeArgTypeOrdinal},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, duration} after", []Token{
+	f(t, language.English, "Before {arg, duration} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, duration}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -225,7 +226,7 @@ func TestTokenize(t *testing.T) {
 	}...)
 
 	// Argument style
-	f(t, "Before {arg, number, short} after", []Token{
+	f(t, language.English, "Before {arg, number, short} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, short}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -233,7 +234,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "short", Type: icumsg.TokenTypeArgStyleShort},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, medium} after", []Token{
+	f(t, language.English, "Before {arg, number, medium} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, medium}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -241,7 +242,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "medium", Type: icumsg.TokenTypeArgStyleMedium},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, long} after", []Token{
+	f(t, language.English, "Before {arg, number, long} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, long}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -249,7 +250,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "long", Type: icumsg.TokenTypeArgStyleLong},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, full} after", []Token{
+	f(t, language.English, "Before {arg, number, full} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, full}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -257,7 +258,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "full", Type: icumsg.TokenTypeArgStyleFull},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, integer} after", []Token{
+	f(t, language.English, "Before {arg, number, integer} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, integer}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -265,7 +266,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "integer", Type: icumsg.TokenTypeArgStyleInteger},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, percent} after", []Token{
+	f(t, language.English, "Before {arg, number, percent} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, percent}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -273,7 +274,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "percent", Type: icumsg.TokenTypeArgStylePercent},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
-	f(t, "Before {arg, number, customAnything} after", []Token{
+	f(t, language.English, "Before {arg, number, customAnything} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, customAnything}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
@@ -283,7 +284,7 @@ func TestTokenize(t *testing.T) {
 	}...)
 
 	// Plural
-	f(t, "{var,plural,other{#messages}one{#message}}", []Token{
+	f(t, language.English, "{var,plural,other{#messages}one{#message}}", []Token{
 		{
 			Str:  "{var,plural,other{#messages}one{#message}}",
 			Type: icumsg.TokenTypePlural,
@@ -302,7 +303,7 @@ func TestTokenize(t *testing.T) {
 	}...)
 
 	// Select ordinal
-	f(t, "{_n,selectordinal,one{#st}two{#nd}few{#rd}other{#th}}", []Token{
+	f(t, language.English, "{_n,selectordinal,one{#st}two{#nd}few{#rd}other{#th}}", []Token{
 		{
 			Str:  "{_n,selectordinal,one{#st}two{#nd}few{#rd}other{#th}}",
 			Type: icumsg.TokenTypeSelectOrdinal,
@@ -333,7 +334,7 @@ func TestTokenize(t *testing.T) {
 
 	{ // Select offset
 		full := `{x,plural,offset:3,other{o}}`
-		f(t, full, []Token{
+		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
 			{Str: "3", Type: icumsg.TokenTypePluralOffset},
@@ -346,7 +347,7 @@ func TestTokenize(t *testing.T) {
 
 	{ // Select offset zero
 		full := `{x,plural,offset:0,other{o}}`
-		f(t, full, []Token{
+		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
 			{Str: "0", Type: icumsg.TokenTypePluralOffset},
@@ -359,7 +360,7 @@ func TestTokenize(t *testing.T) {
 
 	{ // Select offset no comma
 		full := `{ x , plural , offset : 3 other{o}}`
-		f(t, full, []Token{
+		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
 			{Str: "3", Type: icumsg.TokenTypePluralOffset},
@@ -371,7 +372,7 @@ func TestTokenize(t *testing.T) {
 	}
 
 	// Select
-	f(t, "{x,select,foo{Foo}bar{Bar}other{Other}}", []Token{
+	f(t, language.English, "{x,select,foo{Foo}bar{Bar}other{Other}}", []Token{
 		{
 			Str:  "{x,select,foo{Foo}bar{Bar}other{Other}}",
 			Type: icumsg.TokenTypeSelect,
@@ -427,7 +428,7 @@ func TestTokenize(t *testing.T) {
 		full := fmt.Sprintf(`{ gender , select , %s %s %s}`,
 			optionMale, optionFemale, optionOther)
 
-		f(t, full, []Token{
+		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypeSelect},
 			{Str: "gender", Type: icumsg.TokenTypeArgName},
 			// { gender=male
@@ -495,6 +496,73 @@ func TestTokenize(t *testing.T) {
 
 			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
 		}...)
+	}
+}
+
+type TestErrorLocale struct {
+	Input          string
+	Locale         language.Tag
+	ExpectErrIndex int
+	ExpectErr      error
+}
+
+var TestsErrorsLocale = []TestErrorLocale{
+	{
+		"{x,plural, other{yes} few{no}}", language.English,
+		22, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,plural, other{yes} few{no}}", language.AmericanEnglish,
+		22, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,plural, other{yes} zero{no}}", language.Ukrainian,
+		22, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,plural, one{yes} two{no} other{yes}}", language.German,
+		20, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} one{no}}", language.German,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} zero{no}}", language.German,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} two{no}}", language.German,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} many{no}}", language.German,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} few{no}}", language.German,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+	{
+		"{x,selectordinal, other{yes} zero{no}}", language.Ukrainian,
+		29, icumsg.ErrUnsupportedPluralForm,
+	},
+}
+
+func TestTokenizeErrLocale(t *testing.T) {
+	t.Parallel()
+
+	var tokenizer icumsg.Tokenizer
+	var buffer []icumsg.Token
+
+	for _, tt := range TestsErrorsLocale {
+		t.Run("", func(t *testing.T) {
+			buffer = buffer[:0]
+			_, err := tokenizer.Tokenize(tt.Locale, buffer, tt.Input)
+			t.Logf("input: %q", tt.Input)
+			requireErrIs(t, tt.ExpectErr, err)
+			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
+		})
 	}
 }
 
@@ -670,9 +738,11 @@ func TestTokenizeErr(t *testing.T) {
 	var buffer []icumsg.Token
 
 	for _, tt := range TestsErrors {
+		l, err := language.Parse("cy")
+		requireNoErr(t, err)
 		t.Run("", func(t *testing.T) {
 			buffer = buffer[:0]
-			_, err := tokenizer.Tokenize(buffer, tt.Input)
+			_, err := tokenizer.Tokenize(l, buffer, tt.Input)
 			t.Logf("input: %q", tt.Input)
 			requireErrIs(t, tt.ExpectErr, err)
 			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
@@ -682,6 +752,9 @@ func TestTokenizeErr(t *testing.T) {
 
 func Fuzz(f *testing.F) {
 	for _, tt := range TestsErrors {
+		f.Add(tt.Input)
+	}
+	for _, tt := range TestsErrorsLocale {
 		f.Add(tt.Input)
 	}
 	f.Add("Very small")
@@ -695,7 +768,7 @@ func Fuzz(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, input string) {
 		buffer = buffer[:0]
-		_, _ = tokenizer.Tokenize(buffer, input)
+		_, _ = tokenizer.Tokenize(language.English, buffer, input)
 	})
 }
 
@@ -714,7 +787,7 @@ func BenchmarkTokenize(b *testing.B) {
 			for b.Loop() {
 				var err error
 				buffer = buffer[:0] // Reset buffer.
-				buffer, err = tokenizer.Tokenize(buffer, input)
+				buffer, err = tokenizer.Tokenize(language.English, buffer, input)
 				if err != nil {
 					panic(err)
 				}

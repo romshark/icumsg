@@ -7,6 +7,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/romshark/icumsg/internal/cldr"
+	"golang.org/x/text/language"
 )
 
 type TokenType uint8
@@ -137,25 +140,28 @@ type Token struct {
 }
 
 type Tokenizer struct {
-	s   string
-	pos int
+	loc    language.Tag
+	plural cldr.PluralForms
+	s      string
+	pos    int
 }
 
 // Pos returns the last position (byte offset in the input string) the tokenizer was at.
 func (t *Tokenizer) Pos() int { return t.pos }
 
 var (
-	ErrUnclosedQuote      = errors.New("unclosed quote")
-	ErrUnexpectedToken    = errors.New("unexpected token")
-	ErrUnexpectedEOF      = errors.New("unexpected EOF")
-	ErrExpectedComma      = errors.New("expected comma")
-	ErrExpectedColon      = errors.New("expected colon")
-	ErrExpectBracketOpen  = errors.New("expect opening bracket")
-	ErrExpectBracketClose = errors.New("expect closing bracket")
-	ErrMissingOptionOther = errors.New("missing the mandatory 'other' option")
-	ErrEmptyOption        = errors.New("empty option")
-	ErrDuplicateOption    = errors.New("duplicate option")
-	ErrInvalidOffset      = errors.New("invalid offset")
+	ErrUnclosedQuote         = errors.New("unclosed quote")
+	ErrUnexpectedToken       = errors.New("unexpected token")
+	ErrUnexpectedEOF         = errors.New("unexpected EOF")
+	ErrExpectedComma         = errors.New("expected comma")
+	ErrExpectedColon         = errors.New("expected colon")
+	ErrExpectBracketOpen     = errors.New("expect opening bracket")
+	ErrExpectBracketClose    = errors.New("expect closing bracket")
+	ErrMissingOptionOther    = errors.New("missing the mandatory 'other' option")
+	ErrEmptyOption           = errors.New("empty option")
+	ErrDuplicateOption       = errors.New("duplicate option")
+	ErrInvalidOffset         = errors.New("invalid offset")
+	ErrUnsupportedPluralForm = errors.New("plural form unsupported for locale")
 )
 
 // String returns a slice of the input string token t represents.
@@ -170,8 +176,18 @@ func (t Token) String(s string, buffer []Token) string {
 }
 
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.
-func (t *Tokenizer) Tokenize(buffer []Token, s string) ([]Token, error) {
-	t.s, t.pos = s, 0 // Reset tokenizer.
+func (t *Tokenizer) Tokenize(
+	locale language.Tag, buffer []Token, s string,
+) ([]Token, error) {
+	t.loc, t.s, t.pos = locale, s, 0 // Reset tokenizer.
+
+	{ // Select plural forms
+		var ok bool
+		if t.plural, ok = cldr.PluralFormsByTag[t.loc]; !ok {
+			base, _ := t.loc.Base()
+			t.plural = cldr.PluralFormsByBase[base]
+		}
+	}
 
 	if s == "" {
 		return buffer, nil
@@ -544,7 +560,7 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	return buffer, nil
 }
 
-func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
+func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Forms) ([]Token, error) {
 	start := t.pos
 	tp := TokenTypeOptionNumber
 	var initiatorBufIndex int
@@ -582,14 +598,34 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token) ([]Token, error) {
 		option := t.s[start:t.pos]
 		switch option {
 		case "zero":
+			if !f.Zero {
+				t.pos = start // Rollback.
+				return buffer, ErrUnsupportedPluralForm
+			}
 			tp = TokenTypeOptionZero
 		case "one":
+			if !f.One {
+				t.pos = start // Rollback.
+				return buffer, ErrUnsupportedPluralForm
+			}
 			tp = TokenTypeOptionOne
 		case "two":
+			if !f.Two {
+				t.pos = start // Rollback.
+				return buffer, ErrUnsupportedPluralForm
+			}
 			tp = TokenTypeOptionTwo
 		case "few":
+			if !f.Few {
+				t.pos = start // Rollback.
+				return buffer, ErrUnsupportedPluralForm
+			}
 			tp = TokenTypeOptionFew
 		case "many":
+			if !f.Many {
+				t.pos = start // Rollback.
+				return buffer, ErrUnsupportedPluralForm
+			}
 			tp = TokenTypeOptionMany
 		case "other":
 			tp = TokenTypeOptionOther
@@ -697,7 +733,7 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		}
 
 		var err error
-		buffer, err = t.consumeOptionPlural(buffer)
+		buffer, err = t.consumeOptionPlural(buffer, t.plural.Ordinal)
 		if err != nil {
 			return buffer, err
 		}
@@ -786,7 +822,7 @@ func (t *Tokenizer) consumePluralArg(
 		}
 
 		var err error
-		buffer, err = t.consumeOptionPlural(buffer)
+		buffer, err = t.consumeOptionPlural(buffer, t.plural.Cardinal)
 		if err != nil {
 			return buffer, err
 		}
@@ -796,7 +832,6 @@ func (t *Tokenizer) consumePluralArg(
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
-	// TODO: check illegal options relative to the selected base lang.
 
 	// Link the argument initiator to the argument terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)

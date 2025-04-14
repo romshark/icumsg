@@ -5,13 +5,14 @@ import (
 	"os"
 
 	"github.com/romshark/icumsg"
+	"golang.org/x/text/language"
 )
 
 func ExampleTokenizer() {
 	msg := `Hello {arg} ({rank, ordinal})!`
 
 	var tokenizer icumsg.Tokenizer
-	tokens, err := tokenizer.Tokenize(nil, msg)
+	tokens, err := tokenizer.Tokenize(language.English, nil, msg)
 	if err != nil {
 		fmt.Printf("ERR: at index %d: %v\n", tokenizer.Pos(), err)
 		os.Exit(1)
