@@ -17,7 +17,7 @@ tokenizer.
 https://go.dev/play/p/uNHO3Gt128Z
 
 ```go
-package icumsg_test
+package main
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ import (
 	"golang.org/x/text/language"
 )
 
-func ExampleTokenizer() {
+func main() {
 	msg := `Hello {arg} ({rank, ordinal})!`
 
 	var tokenizer icumsg.Tokenizer
@@ -53,5 +53,32 @@ func ExampleTokenizer() {
 	//  5 (argument name): "rank"
 	//  6 (argument type ordinal): "ordinal"
 	//  7 (literal): ")!"
+}
+```
+
+Error handling:
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/romshark/icumsg"
+	"golang.org/x/text/language"
+)
+
+func main() {
+	// The English language only supports the 'one' and 'other' CLDR plural forms.
+	msg := `{numMsgs,plural, one{# message} other{# messages} few{this is wrong}}`
+
+	var tokenizer icumsg.Tokenizer
+	_, err := tokenizer.Tokenize(language.English, nil, msg)
+	if err != nil {
+		fmt.Printf("Error at index %d: %v\n", tokenizer.Pos(), err)
+	}
+
+	// output:
+	// Error at index 50: plural form unsupported for locale
 }
 ```

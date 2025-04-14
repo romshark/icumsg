@@ -35,3 +35,16 @@ func ExampleTokenizer() {
 	//  6 (argument type ordinal): "ordinal"
 	//  7 (literal): ")!"
 }
+
+func ExampleTokenizer_error() {
+	msg := `{numMsgs,plural, one{# message} other{# messages} few{this is wrong}}`
+
+	var tokenizer icumsg.Tokenizer
+	_, err := tokenizer.Tokenize(language.English, nil, msg)
+	if err != nil {
+		fmt.Printf("Error at index %d: %v\n", tokenizer.Pos(), err)
+	}
+
+	// output:
+	// Error at index 50: plural form unsupported for locale
+}
