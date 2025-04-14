@@ -14,7 +14,7 @@ This Go module provides an efficient
 [ICU Message Format](https://unicode-org.github.io/icu/userguide/format_parse/messages/)
 tokenizer.
 
-https://go.dev/play/p/uNHO3Gt128Z
+https://go.dev/play/p/y7OA1YK2Wn4
 
 ```go
 package main
@@ -57,6 +57,8 @@ func main() {
 ```
 
 Error handling:
+
+https://go.dev/play/p/NI6gXkcJJcH
 
 ```go
 package main
