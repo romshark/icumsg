@@ -4,6 +4,7 @@ package icumsg
 
 import (
 	"errors"
+	"iter"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -173,6 +174,43 @@ func (t Token) String(s string, buffer []Token) string {
 	}
 	// t.Type >= TokenTypePlural && t.Type <= TokenTypeOptionNumber
 	return s[t.IndexStart:buffer[t.IndexEnd].IndexEnd] // Complex
+}
+
+// Options returns an iterator iterating over all options of a select,
+// plural or selectordinal token at buffer[tokenIndex].
+// The iterator provides the indexes of option tokens.
+// Returns a no-op iterator if buffer[tokenIndex] is neither of:
+//
+//   - TokenTypeSelect
+//   - TokenTypePlural
+//   - TokenTypeSelectOrdinal
+func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
+	switch buffer[tokenIndex].Type {
+	case TokenTypeSelect, TokenTypePlural, TokenTypeSelectOrdinal:
+	default:
+		// Only select, plural and selectordinal can have options.
+		return func(yield func(int) bool) {}
+	}
+	return func(yield func(int) bool) {
+		// +1 To skip the argument name.
+		for ti := tokenIndex + 2; ti < len(buffer); {
+			switch buffer[ti].Type {
+			case TokenTypeOption,
+				TokenTypeOptionZero,
+				TokenTypeOptionOne,
+				TokenTypeOptionTwo,
+				TokenTypeOptionFew,
+				TokenTypeOptionMany,
+				TokenTypeOptionOther:
+				if !yield(ti) {
+					return
+				}
+				ti = buffer[ti].IndexEnd // Skip contents.
+			default:
+				ti++
+			}
+		}
+	}
 }
 
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.

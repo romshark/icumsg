@@ -45,14 +45,14 @@ type Token struct {
 }
 
 // ToTestTokens creates a slice of simplified tokens with their string values.
-func ToTestTokens(input string, toks []icumsg.Token) []Token {
+func ToTestTokens(input string, buffer, toks []icumsg.Token) []Token {
 	if len(toks) == 0 {
 		return nil
 	}
 	tokens := make([]Token, len(toks))
 	for i, tok := range toks {
 		tokens[i] = Token{
-			Str:  tok.String(input, toks),
+			Str:  tok.String(input, buffer),
 			Type: tok.Type,
 		}
 	}
@@ -132,7 +132,7 @@ func TestTokenize(t *testing.T) {
 		buffer = buffer[:0]
 		buffer, err := tokenizer.Tokenize(locale, buffer, input)
 		requireNoErr(t, err)
-		actual := ToTestTokens(input, buffer)
+		actual := ToTestTokens(input, buffer, buffer)
 		compareTokens(t, expect, actual)
 	}
 
@@ -748,6 +748,58 @@ func TestTokenizeErr(t *testing.T) {
 			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
 		})
 	}
+}
+
+func TestOptions(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	var buffer []icumsg.Token
+
+	fn := func(t *testing.T, input string, index int, expect ...Token) {
+		t.Helper()
+		buffer = buffer[:0]
+		var err error
+		buffer, err = tokenizer.Tokenize(language.English, buffer, input)
+		requireNoErr(t, err)
+		var collected []icumsg.Token
+		for i := range icumsg.Options(buffer, index) {
+			collected = append(collected, buffer[i])
+		}
+		actual := ToTestTokens(input, buffer, collected)
+		compareTokens(t, expect, actual)
+	}
+
+	fn(t, "Not a plural, select or selectordinal", 0)
+	fn(t, "Prefix {x, plural, other {a} one {b}}", 1,
+		Token{Str: "other {a}", Type: icumsg.TokenTypeOptionOther},
+		Token{Str: "one {b}", Type: icumsg.TokenTypeOptionOne})
+	fn(t, "Prefix {x,select, other{x}}", 1,
+		Token{Str: "other{x}", Type: icumsg.TokenTypeOptionOther})
+	fn(t, "Prefix {x,select,other{o}opt1{a}opt2{b}opt3{c}opt4{d}}", 1,
+		Token{Str: "other{o}", Type: icumsg.TokenTypeOptionOther},
+		Token{Str: "opt1{a}", Type: icumsg.TokenTypeOption},
+		Token{Str: "opt2{b}", Type: icumsg.TokenTypeOption},
+		Token{Str: "opt3{c}", Type: icumsg.TokenTypeOption},
+		Token{Str: "opt4{d}", Type: icumsg.TokenTypeOption})
+	fn(t, "Prefix {x,selectordinal,other{o}one{a}few{b}two{c}}", 1,
+		Token{Str: "other{o}", Type: icumsg.TokenTypeOptionOther},
+		Token{Str: "one{a}", Type: icumsg.TokenTypeOptionOne},
+		Token{Str: "few{b}", Type: icumsg.TokenTypeOptionFew},
+		Token{Str: "two{c}", Type: icumsg.TokenTypeOptionTwo})
+}
+
+func TestOptionsBreak(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+
+	input := "Prefix {x,selectordinal,other{o}one{a}few{b}two{c}}"
+	buffer, err := tokenizer.Tokenize(language.English, nil, input)
+	requireNoErr(t, err)
+
+	itr := 0
+	for range icumsg.Options(buffer, 1) {
+		itr++
+		break
+	}
+	requireEqual(t, 1, itr)
 }
 
 func Fuzz(f *testing.F) {
