@@ -185,15 +185,17 @@ func (t Token) String(s string, buffer []Token) string {
 //   - TokenTypePlural
 //   - TokenTypeSelectOrdinal
 func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
+	var endIndex int
 	switch buffer[tokenIndex].Type {
 	case TokenTypeSelect, TokenTypePlural, TokenTypeSelectOrdinal:
+		endIndex = buffer[tokenIndex].IndexEnd
 	default:
 		// Only select, plural and selectordinal can have options.
 		return func(yield func(int) bool) {}
 	}
 	return func(yield func(int) bool) {
 		// +1 To skip the argument name.
-		for ti := tokenIndex + 2; ti < len(buffer); {
+		for ti := tokenIndex + 2; ti < endIndex; {
 			switch buffer[ti].Type {
 			case TokenTypeOption,
 				TokenTypeOptionZero,

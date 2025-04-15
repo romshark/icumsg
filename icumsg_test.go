@@ -785,6 +785,40 @@ func TestOptions(t *testing.T) {
 		Token{Str: "one{a}", Type: icumsg.TokenTypeOptionOne},
 		Token{Str: "few{b}", Type: icumsg.TokenTypeOptionFew},
 		Token{Str: "two{c}", Type: icumsg.TokenTypeOptionTwo})
+
+	{
+		nested := `Prefix {x,plural,
+			other{byGender: {gender, select,
+				other  {A_OTHER}
+				female {A_FEMALE}
+				male   {A_MALE}
+			}}
+			one{byGender: {gender, select,
+				other  {B_OTHER}
+				female {B_FEMALE}
+				male   {B_MALE}
+			}}
+		}`
+		fn(t, nested, 1, // plural
+			Token{Str: `other{byGender: {gender, select,
+				other  {A_OTHER}
+				female {A_FEMALE}
+				male   {A_MALE}
+			}}`, Type: icumsg.TokenTypeOptionOther},
+			Token{Str: `one{byGender: {gender, select,
+				other  {B_OTHER}
+				female {B_FEMALE}
+				male   {B_MALE}
+			}}`, Type: icumsg.TokenTypeOptionOne})
+		fn(t, nested, 5, // x=other
+			Token{Str: `other  {A_OTHER}`, Type: icumsg.TokenTypeOptionOther},
+			Token{Str: `female {A_FEMALE}`, Type: icumsg.TokenTypeOption},
+			Token{Str: `male   {A_MALE}`, Type: icumsg.TokenTypeOption})
+		fn(t, nested, 22, // x=one
+			Token{Str: `other  {B_OTHER}`, Type: icumsg.TokenTypeOptionOther},
+			Token{Str: `female {B_FEMALE}`, Type: icumsg.TokenTypeOption},
+			Token{Str: `male   {B_MALE}`, Type: icumsg.TokenTypeOption})
+	}
 }
 
 func TestOptionsBreak(t *testing.T) {
