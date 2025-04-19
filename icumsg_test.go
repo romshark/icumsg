@@ -836,6 +836,57 @@ func TestOptionsBreak(t *testing.T) {
 	requireEqual(t, 1, itr)
 }
 
+func TestIsComplete(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	var buffer []icumsg.Token
+
+	fn := func(t *testing.T, locale language.Tag, expect bool, input string) {
+		t.Helper()
+		buffer = buffer[:0]
+		var err error
+		buffer, err = tokenizer.Tokenize(locale, buffer, input)
+		requireNoErr(t, err)
+		requireEqual(t, expect, icumsg.IsComplete(locale, buffer))
+	}
+
+	// Expect complete.
+	fn(t, language.English, true, "Simple literal text message")
+	fn(t, language.AmericanEnglish, true, "Simple literal text message")
+	fn(t, language.Ukrainian, true, "Simple literal text message")
+	fn(t, language.Arabic, true, "Simple literal text message")
+
+	// TODO
+	fn(t, language.English, true, "{_0, select, other{a}}")
+
+	fn(t, language.English, true, "{_0, plural, other{# a} one{# b}}")
+	fn(t, language.English, true, "{_0, plural, one{# b} other{# a}}")
+	fn(t, language.English, true, "{_0, plural, =0{a} =1{b} one{# c} other{# d}}")
+
+	fn(t, language.English, true,
+		"{_0, selectordinal, other{# a} one{# b} two{# c} few{# d}}")
+	fn(t, language.Ukrainian, true,
+		"{_0, selectordinal, other{# a} few{# b}}")
+	fn(t, language.Arabic, true,
+		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e} two{# f}}")
+	fn(t, language.Arabic, true,
+		"{_0, selectordinal, other{# a}}")
+	fn(t, language.Kazakh, true,
+		"{_0, selectordinal, other{# a} many{# b}}")
+	fn(t, language.MustParse("cy"), true,
+		"{_0, selectordinal, other{#a} zero{#b} one{#c} two{#d} few{#e} many{#f}}")
+
+	// Expect incomplete.
+	// missing: one
+	fn(t, language.English, false, "{_0, plural, =0{a} =1{b} other{# d}}")
+	// missing: one
+	fn(t, language.English, false, "{_0, plural, other{# a}}")
+	// missing: one,few,many
+	fn(t, language.Ukrainian, false, "{_0, selectordinal, other{# a}}")
+	// missing: two
+	fn(t, language.Arabic, false,
+		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e}}")
+}
+
 func Fuzz(f *testing.F) {
 	for _, tt := range TestsErrors {
 		f.Add(tt.Input)

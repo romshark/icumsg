@@ -215,6 +215,73 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 	}
 }
 
+// IsComplete returns true if the ICU message in buffer specifies
+// plural forms required by locale. Otherwise returns false.
+func IsComplete(locale language.Tag, buffer []Token) bool {
+	var pluralForms cldr.PluralForms
+	{ // Select plural forms
+		var ok bool
+		if pluralForms, ok = cldr.PluralFormsByTag[locale]; !ok {
+			base, _ := locale.Base()
+			pluralForms = cldr.PluralFormsByBase[base]
+		}
+	}
+
+	for i := 0; i < len(buffer); i++ {
+		t := buffer[i]
+		switch t.Type {
+		case TokenTypeSelect:
+			// TODO
+			i = t.IndexEnd + 1
+		case TokenTypePlural:
+			var forms cldr.Forms
+			for j := range Options(buffer, i) {
+				switch buffer[j].Type {
+				case TokenTypeOptionZero:
+					forms.Zero = true
+				case TokenTypeOptionOne:
+					forms.One = true
+				case TokenTypeOptionTwo:
+					forms.Two = true
+				case TokenTypeOptionFew:
+					forms.Few = true
+				case TokenTypeOptionMany:
+					forms.Many = true
+				case TokenTypeOptionOther:
+					forms.Other = true
+				}
+			}
+			if forms != pluralForms.Cardinal {
+				return false
+			}
+			i = t.IndexEnd + 1
+		case TokenTypeSelectOrdinal:
+			var forms cldr.Forms
+			for j := range Options(buffer, i) {
+				switch buffer[j].Type {
+				case TokenTypeOptionZero:
+					forms.Zero = true
+				case TokenTypeOptionOne:
+					forms.One = true
+				case TokenTypeOptionTwo:
+					forms.Two = true
+				case TokenTypeOptionFew:
+					forms.Few = true
+				case TokenTypeOptionMany:
+					forms.Many = true
+				case TokenTypeOptionOther:
+					forms.Other = true
+				}
+			}
+			if forms != pluralForms.Ordinal {
+				return false
+			}
+			i = t.IndexEnd + 1
+		}
+	}
+	return true
+}
+
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.
 func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
