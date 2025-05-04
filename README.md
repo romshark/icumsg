@@ -92,6 +92,8 @@ ICU messages can be valid yet icomplete when missing some
 `icumsg.Completeness` allows you to inspect a message in detail,
 find unsupported select options and missing plural options.
 
+https://go.dev/play/p/U9t0a0XH9U_h
+
 ```go
 package main
 
