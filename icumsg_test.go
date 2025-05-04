@@ -11,17 +11,36 @@ import (
 	"golang.org/x/text/language"
 )
 
-func requireEqual[T comparable](tb testing.TB, expect, actual T) {
+func requireEqual[T comparable](tb testing.TB, expect, actual T, msg ...any) {
 	tb.Helper()
 	if expect != actual {
-		tb.Fatalf("\nexpected: %#v;\nreceived: %#v", expect, actual)
+		m := ""
+		if msg != nil {
+			m = "\n" + fmt.Sprintf(msg[0].(string), msg[1:]...)
+		}
+		tb.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
 	}
 }
 
-func requireErrIs(t *testing.T, expect, actual error) {
+func requireDeepEqual[T any](tb testing.TB, expect, actual T, msg ...any) {
+	tb.Helper()
+	if !reflect.DeepEqual(expect, actual) {
+		m := ""
+		if msg != nil {
+			m = "\n" + fmt.Sprintf(msg[0].(string), msg[1:]...)
+		}
+		tb.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
+	}
+}
+
+func requireErrIs(t *testing.T, expect, actual error, msg ...any) {
 	t.Helper()
 	if !errors.Is(actual, expect) {
-		t.Fatalf("\nexpected: %#v;\nreceived: %#v", expect, actual)
+		m := ""
+		if msg != nil {
+			m = fmt.Sprintf(msg[0].(string), msg[1:]...)
+		}
+		t.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
 	}
 }
 
@@ -836,55 +855,195 @@ func TestOptionsBreak(t *testing.T) {
 	requireEqual(t, 1, itr)
 }
 
-func TestIsComplete(t *testing.T) {
+func TestCompleteness(t *testing.T) {
 	var tokenizer icumsg.Tokenizer
 	var buffer []icumsg.Token
 
-	fn := func(t *testing.T, locale language.Tag, expect bool, input string) {
+	fn := func(
+		t *testing.T,
+		locale language.Tag,
+		input string,
+		options map[string][]string,
+		presencePolicy icumsg.OptionsPresencePolicy,
+		unknownPolicy icumsg.OptionUnknownPolicy,
+		expectTotal int,
+		expectIncomplete, expectRejected []string,
+	) {
 		t.Helper()
 		buffer = buffer[:0]
 		var err error
 		buffer, err = tokenizer.Tokenize(locale, buffer, input)
 		requireNoErr(t, err)
-		requireEqual(t, expect, icumsg.IsComplete(locale, buffer))
+		var incomplete, rejected []string
+		actualTotal := icumsg.Completeness(input, buffer, locale,
+			func(argName string) (
+				[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+			) {
+				return options[argName], presencePolicy, unknownPolicy
+			},
+			func(index int) {
+				incomplete = append(incomplete, buffer[index].String(input, buffer))
+			},
+			func(index int) {
+				rejected = append(rejected, buffer[index].String(input, buffer))
+			})
+		requireEqual(t, expectTotal, actualTotal, "total")
+		requireDeepEqual(t, expectIncomplete, incomplete, "incomplete")
+		requireDeepEqual(t, expectRejected, rejected, "rejected")
 	}
 
-	// Expect complete.
-	fn(t, language.English, true, "Simple literal text message")
-	fn(t, language.AmericanEnglish, true, "Simple literal text message")
-	fn(t, language.Ukrainian, true, "Simple literal text message")
-	fn(t, language.Arabic, true, "Simple literal text message")
+	// Expect full completeness.
+	fn(t, language.English, "Simple literal text message",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		0, nil, nil)
+	fn(t, language.AmericanEnglish, "Simple literal text message",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		0, nil, nil)
+	fn(t, language.Ukrainian, "Simple literal text message",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		0, nil, nil)
+	fn(t, language.Arabic, "Simple literal text message",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		0, nil, nil)
 
-	// TODO
-	fn(t, language.English, true, "{_0, select, other{a}}")
+	// Expect full completeness for no options provided.
+	fn(t, language.English, "{_0, select, other{a}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
 
-	fn(t, language.English, true, "{_0, plural, other{# a} one{# b}}")
-	fn(t, language.English, true, "{_0, plural, one{# b} other{# a}}")
-	fn(t, language.English, true, "{_0, plural, =0{a} =1{b} one{# c} other{# d}}")
+	// Expect full completeness for ordinal and plural.
+	fn(t, language.English, "{_0, plural, other{# a} one{# b}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English, "{_0, plural, one{# b} other{# a}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English, "{_0, plural, =0{a} =1{b} one{# c} other{# d}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.Arabic,
+		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e} two{# f}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English,
+		"{_0, selectordinal, other{# a} one{# b} two{# c} few{# d}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.Ukrainian,
+		"{_0, selectordinal, other{# a} few{# b}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.Arabic,
+		"{_0, selectordinal, other{# a}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.Kazakh,
+		"{_0, selectordinal, other{# a} many{# b}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.MustParse("cy"),
+		"{_0, selectordinal, other{#a} zero{#b} one{#c} two{#d} few{#e} many{#f}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
 
-	fn(t, language.English, true,
-		"{_0, selectordinal, other{# a} one{# b} two{# c} few{# d}}")
-	fn(t, language.Ukrainian, true,
-		"{_0, selectordinal, other{# a} few{# b}}")
-	fn(t, language.Arabic, true,
-		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e} two{# f}}")
-	fn(t, language.Arabic, true,
-		"{_0, selectordinal, other{# a}}")
-	fn(t, language.Kazakh, true,
-		"{_0, selectordinal, other{# a} many{# b}}")
-	fn(t, language.MustParse("cy"), true,
-		"{_0, selectordinal, other{#a} zero{#b} one{#c} two{#d} few{#e} many{#f}}")
+	// Expect full completeness for required options.
+	fn(t, language.English,
+		"{_0, select, foo{foo} bar{bar} other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English,
+		"{_0, select, foo{foo} bar{bar} other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
 
-	// Expect incomplete.
-	// missing: one
-	fn(t, language.English, false, "{_0, plural, =0{a} =1{b} other{# d}}")
-	// missing: one
-	fn(t, language.English, false, "{_0, plural, other{# a}}")
-	// missing: one,few,many
-	fn(t, language.Ukrainian, false, "{_0, selectordinal, other{# a}}")
-	// missing: two
-	fn(t, language.Arabic, false,
-		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e}}")
+	// Expect full completeness for optional options.
+	fn(t, language.English,
+		"no bar: {_0, select, foo{foo} other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English,
+		"no foo: {_0, select, bar{bar} other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.English,
+		"neither foo nor bar: {_0, select, other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+
+	// Expect incomplete options.
+	fn(t, language.English, "missing one: {_0, plural, =0{a} =1{b} other{# d}}",
+		nil, 0, 0, 1, []string{"{_0, plural, =0{a} =1{b} other{# d}}"}, nil)
+	fn(t, language.English, "missing one: {_0, plural, other{# a}}",
+		nil, 0, 0, 1, []string{"{_0, plural, other{# a}}"}, nil)
+	fn(t, language.Ukrainian, "missing: one,few,many: {_0, selectordinal, other{# a}}",
+		nil, 0, 0, 1, []string{"{_0, selectordinal, other{# a}}"}, nil)
+	fn(t, language.Arabic,
+		"missing two: {_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e}}",
+		nil, 0, 0, 1, []string{
+			"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e}}",
+		}, nil)
+	fn(t, language.Kazakh,
+		"missing: many {_0, selectordinal, other{# a}}",
+		nil, 0, 0, 1, []string{"{_0, selectordinal, other{# a}}"}, nil)
+
+	// Expect rejected options.
+	fn(t, language.English, "unknown c,d: {_0, select, d{d} a{a} b{b} c{c} other{o}}",
+		map[string][]string{"_0": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, nil, []string{"d{d}", "c{c}"})
+	fn(t, language.English,
+		"missing a and unknown c,d: {_0, select, d{d} b{b} c{c} other{o}}",
+		map[string][]string{"_0": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, []string{"{_0, select, d{d} b{b} c{c} other{o}}"}, []string{"d{d}", "c{c}"})
+	fn(t, language.English,
+		"missing a and unknown c,d: {_0, select, d{d} b{b} c{c} other{o}}",
+		map[string][]string{"_0": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, []string{"{_0, select, d{d} b{b} c{c} other{o}}"}, []string{"d{d}", "c{c}"})
+
+	// Ignore unknown options.
+	fn(t, language.English,
+		"missing a and ignored unknown c,d: {_0, select, d{d} b{b} c{c} other{o}}",
+		map[string][]string{"_0": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, []string{"{_0, select, d{d} b{b} c{c} other{o}}"}, nil)
+
+	// Nested select in plural.
+	fn(t, language.English,
+		`missing a in one and b in other: {_0, plural,
+			one{   {_1, select, b{b} other{o}} }
+			other{ {_1, select, a{a} other{o}} }
+		}`,
+		map[string][]string{"_1": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		3, []string{
+			"{_1, select, b{b} other{o}}",
+			"{_1, select, a{a} other{o}}",
+		}, nil)
+
+	// Select in ordinal.
+	fn(t, language.English,
+		`some missing and some rejected: {_0, selectordinal,
+			one{   {_1, select, b{b} other{o}} }
+			two{   {_1, select, a{a} other{o}} }
+			few{   {_1, select, a{a} b{b} c{c} other{o}} }
+			other{ {_1, select, a{a} b{b} d{d} other{o}} }
+		}`,
+		map[string][]string{"_1": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		5, []string{
+			"{_1, select, b{b} other{o}}",
+			"{_1, select, a{a} other{o}}",
+		}, []string{
+			"c{c}",
+			"d{d}",
+		})
 }
 
 func Fuzz(f *testing.F) {

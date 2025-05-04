@@ -5,6 +5,7 @@ package icumsg
 import (
 	"errors"
 	"iter"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -215,9 +216,63 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 	}
 }
 
-// IsComplete returns true if the ICU message in buffer specifies
-// plural forms required by locale. Otherwise returns false.
-func IsComplete(locale language.Tag, buffer []Token) bool {
+// OptionsPresencePolicy defines treatment of known options.
+type OptionsPresencePolicy int8
+
+const (
+	// OptionsPresencePolicyOptional does not require all select options to be present
+	// for the ICU message to be considered complete.
+	OptionsPresencePolicyOptional = iota
+
+	// OptionsPresencePolicyRequired requires all select options to be present
+	// for the ICU message to be considered complete.
+	OptionsPresencePolicyRequired
+)
+
+// OptionUnknownPolicy defines treatment of unknown select options.
+type OptionUnknownPolicy int8
+
+const (
+	// OptionUnknownPolicyIgnore ignores unknown select options.
+	OptionUnknownPolicyIgnore OptionUnknownPolicy = iota
+	// OptionUnknownPolicyReject rejects unknown select options.
+	OptionUnknownPolicyReject
+)
+
+// Completeness returns the total number of choices in src.
+// onIncomplete is invoked when an incomplete, select, plural or selectordinal
+// is encountered.
+// onRejected is invoked when an unknown select option was encountered.
+// selectOptions is invoked when a select is encountered and if it returns
+// a slice then those will be the expected options the presence of which
+// will define whether the select is complete (depending on the policies returned).
+// selectOptions is not invoked for plural and selectordinal, instead locale is used
+// to determine what options are required.
+func Completeness(
+	src string,
+	buffer []Token,
+	locale language.Tag,
+	selectOptions func(argName string) (
+		[]string, OptionsPresencePolicy, OptionUnknownPolicy,
+	),
+	onIncomplete func(index int),
+	onRejected func(index int),
+) (total int) {
+	return completeness(0, len(buffer), src, buffer, locale,
+		selectOptions, onIncomplete, onRejected)
+}
+
+func completeness(
+	startIndex, endIndex int,
+	src string,
+	buffer []Token,
+	locale language.Tag,
+	selectOptions func(argName string) (
+		[]string, OptionsPresencePolicy, OptionUnknownPolicy,
+	),
+	onIncomplete func(index int),
+	onRejected func(index int),
+) (total int) {
 	var pluralForms cldr.PluralForms
 	{ // Select plural forms
 		var ok bool
@@ -227,13 +282,39 @@ func IsComplete(locale language.Tag, buffer []Token) bool {
 		}
 	}
 
-	for i := 0; i < len(buffer); i++ {
+	for i := startIndex; i < endIndex; i++ {
 		t := buffer[i]
 		switch t.Type {
 		case TokenTypeSelect:
-			// TODO
+			total++
+			tn := buffer[i+1]
+			opts, presencePolicy, unknownPolicy := selectOptions(tn.String(src, buffer))
+			if len(opts) != 0 {
+				reqCount := len(opts)
+				for j := range Options(buffer, i) {
+					if buffer[j].Type == TokenTypeOptionOther {
+						// Ignore other option.
+						continue
+					}
+					name := buffer[j+1].String(src, buffer)
+					if inOpts := slices.Contains(opts, name); inOpts {
+						reqCount--
+					} else if unknownPolicy == OptionUnknownPolicyReject {
+						onRejected(j)
+					}
+					total += completeness(
+						j, buffer[j].IndexEnd,
+						src, buffer, locale,
+						selectOptions, onIncomplete, onRejected,
+					)
+				}
+				if presencePolicy == OptionsPresencePolicyRequired && reqCount != 0 {
+					onIncomplete(i)
+				}
+			}
 			i = t.IndexEnd + 1
 		case TokenTypePlural:
+			total++
 			var forms cldr.Forms
 			for j := range Options(buffer, i) {
 				switch buffer[j].Type {
@@ -250,12 +331,18 @@ func IsComplete(locale language.Tag, buffer []Token) bool {
 				case TokenTypeOptionOther:
 					forms.Other = true
 				}
+				total += completeness(
+					j, buffer[j].IndexEnd,
+					src, buffer, locale,
+					selectOptions, onIncomplete, onRejected,
+				)
 			}
 			if forms != pluralForms.Cardinal {
-				return false
+				onIncomplete(i)
 			}
 			i = t.IndexEnd + 1
 		case TokenTypeSelectOrdinal:
+			total++
 			var forms cldr.Forms
 			for j := range Options(buffer, i) {
 				switch buffer[j].Type {
@@ -272,14 +359,19 @@ func IsComplete(locale language.Tag, buffer []Token) bool {
 				case TokenTypeOptionOther:
 					forms.Other = true
 				}
+				total += completeness(
+					j, buffer[j].IndexEnd,
+					src, buffer, locale,
+					selectOptions, onIncomplete, onRejected,
+				)
 			}
 			if forms != pluralForms.Ordinal {
-				return false
+				onIncomplete(i)
 			}
 			i = t.IndexEnd + 1
 		}
 	}
-	return true
+	return total
 }
 
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.
