@@ -36,9 +36,9 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		base, _ := l.Base()
 		PluralFormsByTag[l] = PluralForms{cardinal, ordinal}
 		if isBase {
+			base, _ := l.Base()
 			PluralFormsByBase[base] = PluralForms{cardinal, ordinal}
 		}
 	}
