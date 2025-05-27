@@ -140,16 +140,34 @@ func write(
 		len(cardinalsKeys))
 
 	writef("func init () {\n")
-	writef("register := func(s string, cardinal, ordinal Forms) {\n")
+	writef("{\n")
+	writef("PluralFormsByTag[language.Und] = PluralForms{\n")
+	writef("\tCardinal: Forms{Other: true}, Ordinal: Forms{Other: true},\n")
+	writef("}\n")
+	writef("undBase, _ := language.Und.Base()\n")
+	writef("PluralFormsByBase[undBase] = PluralForms{\n")
+	writef("\tCardinal: Forms{Other: true}, Ordinal: Forms{Other: true},\n")
+	writef("}\n")
+	writef("}\n")
+	writef("register := func(s string, cardinal, ordinal Forms, isBase bool) {\n")
 	writef("l, err := language.Parse(s)\n")
 	writef("if err != nil { panic(err) }\n")
 	writef("base, _ := l.Base()\n")
 	writef("PluralFormsByTag[l] = PluralForms {cardinal, ordinal}\n")
-	writef("PluralFormsByBase[base] = PluralForms {cardinal, ordinal}\n")
+	writef("if isBase {\n")
+	writef("\tPluralFormsByBase[base] = PluralForms{cardinal, ordinal}")
+	writef("}")
 	writef("}\n")
 	for _, k := range cardinalsKeys {
 		fCardinal := cardinals.Supplemental.PluralsTypeCardinals[k]
 		fOrdinal := ordinals.Supplemental.PluralsTypeOrdinals[k]
+		if k == "und" {
+			continue
+		}
+
+		base, _ := language.MustParse(k).Base()
+		isBase := base.String() == k
+
 		writef("register(%q,\nForms{Other: true,", k)
 		// Cardinal.
 		if fCardinal.Zero != "" {
@@ -184,7 +202,7 @@ func write(
 		if fOrdinal.Many != "" {
 			writef("Many: true,")
 		}
-		writef("})\n")
+		writef("}, %t)\n", isBase)
 	}
 	writef("}\n\n")
 	for _, k := range cardinalsKeys {
