@@ -285,6 +285,31 @@ func TestTokenize(t *testing.T) {
 		{Str: "integer", Type: icumsg.TokenTypeArgStyleInteger},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
+	f(t, language.English, "Before {arg, number, ::x} after", []Token{
+		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{arg, number, ::x}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "arg", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "::x", Type: icumsg.TokenTypeArgStyleSkeleton},
+		{Str: " after", Type: icumsg.TokenTypeLiteral},
+	}...)
+	f(t, language.English, "Before {arg, number, ::currency/auto} after", []Token{
+		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{arg, number, ::currency/auto}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "arg", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "::currency/auto", Type: icumsg.TokenTypeArgStyleSkeleton},
+		{Str: " after", Type: icumsg.TokenTypeLiteral},
+	}...)
+	f(t, language.English, "Before {arg, number, ::sign-always} after", []Token{
+		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{arg, number, ::sign-always}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "arg", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "::sign-always", Type: icumsg.TokenTypeArgStyleSkeleton},
+		{Str: " after", Type: icumsg.TokenTypeLiteral},
+	}...)
+
 	f(t, language.English, "Before {arg, number, percent} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, percent}", Type: icumsg.TokenTypeSimpleArg},
@@ -585,6 +610,14 @@ func TestTokenizeErrLocale(t *testing.T) {
 	}
 }
 
+func TestFUCK(t *testing.T) {
+	t.Parallel()
+
+	var tokenizer icumsg.Tokenizer
+	_, err := tokenizer.Tokenize(language.English, nil, "{x, number, ::")
+	t.Log(err)
+}
+
 type TestError struct {
 	Input          string
 	ExpectErrIndex int
@@ -603,6 +636,7 @@ var TestsErrors = []TestError{
 	{"{x, number , ", 13, icumsg.ErrUnexpectedEOF},
 	{"{x, number , integer", 20, icumsg.ErrUnexpectedEOF},
 	{"{x, number , integer ", 21, icumsg.ErrUnexpectedEOF},
+	{"{x, number, ::", 14, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other", 16, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other ", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other {", 18, icumsg.ErrUnexpectedEOF},
@@ -674,6 +708,7 @@ var TestsErrors = []TestError{
 	{"{x_, unknown, other{x}}", 5, icumsg.ErrUnexpectedToken},
 	{"{x,plural,other{{}}}", 17, icumsg.ErrUnexpectedToken},
 	{"{n, plural, other{x} }}", 22, icumsg.ErrUnexpectedToken},
+	{"{x, number, ::}", 14, icumsg.ErrUnexpectedToken},
 	// Expected colon.
 	{"{x,plural,offset,", 16, icumsg.ErrExpectedColon},
 	{"{x,plural,offset ,", 17, icumsg.ErrExpectedColon},

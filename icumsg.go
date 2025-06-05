@@ -42,6 +42,7 @@ const (
 	TokenTypeArgStyleCurrency
 	TokenTypeArgStylePercent
 	TokenTypeArgStyleCustom
+	TokenTypeArgStyleSkeleton
 
 	// TokenTypeOptionName is the select option. Always follows TokenTypeOption.
 	TokenTypeOptionName
@@ -502,7 +503,11 @@ func (t *Tokenizer) consumeArgument(buffer []Token) ([]Token, error) {
 			if t.s[t.pos] == ',' {
 				t.pos++ // Consume the comma.
 				t.skipWhitespaces()
-				tokenArgStyle = t.consumeArgStyle()
+				var err error
+				tokenArgStyle, err = t.consumeArgStyle()
+				if err != nil {
+					return buffer, err
+				}
 				t.skipWhitespaces()
 			}
 
@@ -577,12 +582,32 @@ func (t *Tokenizer) consumeArgType() (token Token) {
 	return Token{}
 }
 
-func (t *Tokenizer) consumeArgStyle() (token Token) {
+func (t *Tokenizer) consumeArgStyle() (token Token, err error) {
 	type TypeValPair struct {
 		Value string
 		Type  TokenType
 	}
 	start := t.pos
+
+	if strings.HasPrefix(t.s[t.pos:], "::") {
+		t.pos += 2 // Skip the leading "::".
+		if t.pos >= len(t.s) {
+			return Token{}, ErrUnexpectedEOF
+		}
+		if t.s[t.pos] == '}' {
+			return Token{}, ErrUnexpectedToken
+		}
+		for ; t.pos < len(t.s); t.pos++ {
+			if t.s[t.pos] == '}' {
+				return Token{
+					IndexStart: start,
+					IndexEnd:   t.pos,
+					Type:       TokenTypeArgStyleSkeleton,
+				}, nil
+			}
+		}
+	}
+
 	for _, argType := range [...]TypeValPair{
 		{"short", TokenTypeArgStyleShort},
 		{"medium", TokenTypeArgStyleMedium},
@@ -598,7 +623,7 @@ func (t *Tokenizer) consumeArgStyle() (token Token) {
 				IndexStart: start,
 				IndexEnd:   t.pos,
 				Type:       argType.Type,
-			}
+			}, nil
 		}
 	}
 
@@ -610,10 +635,10 @@ func (t *Tokenizer) consumeArgStyle() (token Token) {
 			IndexStart: start,
 			IndexEnd:   end,
 			Type:       TokenTypeArgStyleCustom,
-		}
+		}, nil
 	}
 
-	return Token{}
+	return Token{}, nil
 }
 
 func (t *Tokenizer) skipWhitespaces() {
