@@ -125,6 +125,7 @@ func TestTokenTypeString(t *testing.T) {
 	f(t, "argument style currency", icumsg.TokenTypeArgStyleCurrency)
 	f(t, "argument style percent", icumsg.TokenTypeArgStylePercent)
 	f(t, "argument style custom", icumsg.TokenTypeArgStyleCustom)
+	f(t, "argument style skeleton", icumsg.TokenTypeArgStyleSkeleton)
 	f(t, "option name", icumsg.TokenTypeOptionName)
 	f(t, "plural argument", icumsg.TokenTypePlural)
 	f(t, "select argument", icumsg.TokenTypeSelect)

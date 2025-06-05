@@ -109,6 +109,8 @@ func (t TokenType) String() string {
 		return "argument style percent"
 	case TokenTypeArgStyleCustom:
 		return "argument style custom"
+	case TokenTypeArgStyleSkeleton:
+		return "argument style skeleton"
 	case TokenTypeOptionName:
 		return "option name"
 	case TokenTypeOption:
