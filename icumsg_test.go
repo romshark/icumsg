@@ -611,14 +611,6 @@ func TestTokenizeErrLocale(t *testing.T) {
 	}
 }
 
-func TestFUCK(t *testing.T) {
-	t.Parallel()
-
-	var tokenizer icumsg.Tokenizer
-	_, err := tokenizer.Tokenize(language.English, nil, "{x, number, ::")
-	t.Log(err)
-}
-
 type TestError struct {
 	Input          string
 	ExpectErrIndex int
