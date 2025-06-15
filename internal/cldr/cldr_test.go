@@ -14,20 +14,20 @@ func requireEqual[T comparable](tb testing.TB, expect, actual T) {
 	}
 }
 
-func TestPluralFormsByTag(t *testing.T) {
-	p := cldr.PluralFormsByTag[language.English]
-	requireEqual(t, cldr.Forms{Other: true, One: true}, p.Cardinal)
-	requireEqual(t, cldr.Forms{Other: true, One: true, Two: true, Few: true}, p.Ordinal)
+func TestPluralRulesByTag(t *testing.T) {
+	p := cldr.PluralRulesByTag[language.English]
+	requireEqual(t, cldr.Rules{Other: true, One: true}, p.Cardinal)
+	requireEqual(t, cldr.Rules{Other: true, One: true, Two: true, Few: true}, p.Ordinal)
 
-	p = cldr.PluralFormsByTag[language.German]
-	requireEqual(t, cldr.Forms{Other: true, One: true}, p.Cardinal)
-	requireEqual(t, cldr.Forms{Other: true}, p.Ordinal)
+	p = cldr.PluralRulesByTag[language.German]
+	requireEqual(t, cldr.Rules{Other: true, One: true}, p.Cardinal)
+	requireEqual(t, cldr.Rules{Other: true}, p.Ordinal)
 
-	p = cldr.PluralFormsByTag[language.Ukrainian]
-	requireEqual(t, cldr.Forms{Other: true, One: true, Few: true, Many: true}, p.Cardinal)
-	requireEqual(t, cldr.Forms{Other: true, Few: true}, p.Ordinal)
+	p = cldr.PluralRulesByTag[language.Ukrainian]
+	requireEqual(t, cldr.Rules{Other: true, One: true, Few: true, Many: true}, p.Cardinal)
+	requireEqual(t, cldr.Rules{Other: true, Few: true}, p.Ordinal)
 
-	p = cldr.PluralFormsByTag[language.French]
-	requireEqual(t, cldr.Forms{Other: true, One: true, Many: true}, p.Cardinal)
-	requireEqual(t, cldr.Forms{Other: true, One: true}, p.Ordinal)
+	p = cldr.PluralRulesByTag[language.French]
+	requireEqual(t, cldr.Rules{Other: true, One: true, Many: true}, p.Cardinal)
+	requireEqual(t, cldr.Rules{Other: true, One: true}, p.Ordinal)
 }

@@ -71,7 +71,7 @@ import (
 )
 
 func main() {
-	// The English language only supports the 'one' and 'other' CLDR plural forms.
+	// The English language only supports the 'one' and 'other' CLDR plural rules.
 	msg := `{numMsgs,plural, one{# message} other{# messages} few{this is wrong}}`
 
 	var tokenizer icumsg.Tokenizer
@@ -81,7 +81,7 @@ func main() {
 	}
 
 	// output:
-	// Error at index 50: plural form unsupported for locale
+	// Error at index 50: plural rule unsupported for locale
 }
 ```
 

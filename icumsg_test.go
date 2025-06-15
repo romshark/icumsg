@@ -1,60 +1,21 @@
 package icumsg_test
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
-	"github.com/romshark/icumsg"
 	"golang.org/x/text/language"
+
+	"github.com/romshark/icumsg"
+	"github.com/romshark/icumsg/internal/test"
 )
-
-func requireEqual[T comparable](tb testing.TB, expect, actual T, msg ...any) {
-	tb.Helper()
-	if expect != actual {
-		m := ""
-		if msg != nil {
-			m = "\n" + fmt.Sprintf(msg[0].(string), msg[1:]...)
-		}
-		tb.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
-	}
-}
-
-func requireDeepEqual[T any](tb testing.TB, expect, actual T, msg ...any) {
-	tb.Helper()
-	if !reflect.DeepEqual(expect, actual) {
-		m := ""
-		if msg != nil {
-			m = "\n" + fmt.Sprintf(msg[0].(string), msg[1:]...)
-		}
-		tb.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
-	}
-}
-
-func requireErrIs(t *testing.T, expect, actual error, msg ...any) {
-	t.Helper()
-	if !errors.Is(actual, expect) {
-		m := ""
-		if msg != nil {
-			m = fmt.Sprintf(msg[0].(string), msg[1:]...)
-		}
-		t.Fatalf("\nexpected: %#v;\nreceived: %#v%s", expect, actual, m)
-	}
-}
-
-func requireNoErr(tb testing.TB, err error) {
-	tb.Helper()
-	if err != nil {
-		tb.Fatalf("\nexpected: no error;\nreceived: %#v", err)
-	}
-}
 
 func ReadFile[S string | []byte](tb testing.TB, fileName string) S {
 	tb.Helper()
 	fc, err := os.ReadFile(fileName)
-	requireNoErr(tb, err)
+	test.RequireNoErr(tb, err)
 	return S(fc)
 }
 
@@ -103,7 +64,7 @@ func compareTokens(t *testing.T, expect, actual []Token) {
 func TestTokenTypeString(t *testing.T) {
 	f := func(t *testing.T, expect string, tp icumsg.TokenType) {
 		t.Helper()
-		requireEqual(t, expect, tp.String())
+		test.RequireEqual(t, expect, tp.String())
 	}
 
 	f(t, "unknown", 0)
@@ -151,7 +112,7 @@ func TestTokenize(t *testing.T) {
 		t.Helper()
 		buffer = buffer[:0]
 		buffer, err := tokenizer.Tokenize(locale, buffer, input)
-		requireNoErr(t, err)
+		test.RequireNoErr(t, err)
 		actual := ToTestTokens(input, buffer, buffer)
 		compareTokens(t, expect, actual)
 	}
@@ -554,43 +515,43 @@ type TestErrorLocale struct {
 var TestsErrorsLocale = []TestErrorLocale{
 	{
 		"{x,plural, other{yes} few{no}}", language.English,
-		22, icumsg.ErrUnsupportedPluralForm,
+		22, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,plural, other{yes} few{no}}", language.AmericanEnglish,
-		22, icumsg.ErrUnsupportedPluralForm,
+		22, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,plural, other{yes} zero{no}}", language.Ukrainian,
-		22, icumsg.ErrUnsupportedPluralForm,
+		22, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,plural, one{yes} two{no} other{yes}}", language.German,
-		20, icumsg.ErrUnsupportedPluralForm,
+		20, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} one{no}}", language.German,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} zero{no}}", language.German,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} two{no}}", language.German,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} many{no}}", language.German,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} few{no}}", language.German,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
 		"{x,selectordinal, other{yes} zero{no}}", language.Ukrainian,
-		29, icumsg.ErrUnsupportedPluralForm,
+		29, icumsg.ErrUnsupportedPluralRule,
 	},
 }
 
@@ -605,8 +566,8 @@ func TestTokenizeErrLocale(t *testing.T) {
 			buffer = buffer[:0]
 			_, err := tokenizer.Tokenize(tt.Locale, buffer, tt.Input)
 			t.Logf("input: %q", tt.Input)
-			requireErrIs(t, tt.ExpectErr, err)
-			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
+			test.RequireErrIs(t, tt.ExpectErr, err)
+			test.RequireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
 		})
 	}
 }
@@ -786,13 +747,13 @@ func TestTokenizeErr(t *testing.T) {
 
 	for _, tt := range TestsErrors {
 		l, err := language.Parse("cy")
-		requireNoErr(t, err)
+		test.RequireNoErr(t, err)
 		t.Run("", func(t *testing.T) {
 			buffer = buffer[:0]
 			_, err := tokenizer.Tokenize(l, buffer, tt.Input)
 			t.Logf("input: %q", tt.Input)
-			requireErrIs(t, tt.ExpectErr, err)
-			requireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
+			test.RequireErrIs(t, tt.ExpectErr, err)
+			test.RequireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
 		})
 	}
 }
@@ -806,7 +767,7 @@ func TestOptions(t *testing.T) {
 		buffer = buffer[:0]
 		var err error
 		buffer, err = tokenizer.Tokenize(language.English, buffer, input)
-		requireNoErr(t, err)
+		test.RequireNoErr(t, err)
 		var collected []icumsg.Token
 		for i := range icumsg.Options(buffer, index) {
 			collected = append(collected, buffer[i])
@@ -873,14 +834,14 @@ func TestOptionsBreak(t *testing.T) {
 
 	input := "Prefix {x,selectordinal,other{o}one{a}few{b}two{c}}"
 	buffer, err := tokenizer.Tokenize(language.English, nil, input)
-	requireNoErr(t, err)
+	test.RequireNoErr(t, err)
 
 	itr := 0
 	for range icumsg.Options(buffer, 1) {
 		itr++
 		break
 	}
-	requireEqual(t, 1, itr)
+	test.RequireEqual(t, 1, itr)
 }
 
 func TestCompleteness(t *testing.T) {
@@ -901,7 +862,7 @@ func TestCompleteness(t *testing.T) {
 		buffer = buffer[:0]
 		var err error
 		buffer, err = tokenizer.Tokenize(locale, buffer, input)
-		requireNoErr(t, err)
+		test.RequireNoErr(t, err)
 		var incomplete, rejected []string
 		actualTotal := icumsg.Completeness(input, buffer, locale,
 			func(argName string) (
@@ -915,9 +876,9 @@ func TestCompleteness(t *testing.T) {
 			func(index int) {
 				rejected = append(rejected, buffer[index].String(input, buffer))
 			})
-		requireEqual(t, expectTotal, actualTotal, "total")
-		requireDeepEqual(t, expectIncomplete, incomplete, "incomplete")
-		requireDeepEqual(t, expectRejected, rejected, "rejected")
+		test.RequireEqual(t, expectTotal, actualTotal, "total")
+		test.RequireDeepEqual(t, expectIncomplete, incomplete, "incomplete")
+		test.RequireDeepEqual(t, expectRejected, rejected, "rejected")
 	}
 
 	// Expect full completeness.

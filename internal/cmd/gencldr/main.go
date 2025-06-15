@@ -121,41 +121,41 @@ func write(
 
 	writef("import \"golang.org/x/text/language\"\n")
 
-	writef("// Forms defines supported CLDR plural forms.\n")
-	writef("type Forms struct { Zero, One, Two, Few, Many, Other bool }\n\n")
+	writef("// Rules defines supported CLDR plural rules.\n")
+	writef("type Rules struct { Zero, One, Two, Few, Many, Other bool }\n\n")
 
-	writef("// PluralForms defines supported cardinal and ordinal CLDR plural forms.\n")
-	writef("type PluralForms struct { Cardinal Forms; Ordinal Forms }\n\n")
+	writef("// PluralRules defines supported cardinal and ordinal CLDR plural rules.\n")
+	writef("type PluralRules struct { Cardinal Rules; Ordinal Rules }\n\n")
 
 	writef(
-		"// PluralFormsByTag maps language tags to supported plural forms.\n",
+		"// PluralRulesByTag maps language tags to supported plural rules.\n",
 	)
-	writef("var PluralFormsByTag = make(map[language.Tag]PluralForms, %d)\n",
+	writef("var PluralRulesByTag = make(map[language.Tag]PluralRules, %d)\n",
 		len(cardinalsKeys))
 
 	writef(
-		"// PluralFormsByBase maps base languages to supported plural forms.\n",
+		"// PluralRulesByBase maps base languages to supported plural rules.\n",
 	)
-	writef("var PluralFormsByBase = make(map[language.Base]PluralForms, %d)\n",
+	writef("var PluralRulesByBase = make(map[language.Base]PluralRules, %d)\n",
 		len(cardinalsKeys))
 
 	writef("func init () {\n")
 	writef("{\n")
-	writef("PluralFormsByTag[language.Und] = PluralForms{\n")
-	writef("\tCardinal: Forms{Other: true}, Ordinal: Forms{Other: true},\n")
+	writef("PluralRulesByTag[language.Und] = PluralRules{\n")
+	writef("\tCardinal: Rules{Other: true}, Ordinal: Rules{Other: true},\n")
 	writef("}\n")
 	writef("undBase, _ := language.Und.Base()\n")
-	writef("PluralFormsByBase[undBase] = PluralForms{\n")
-	writef("\tCardinal: Forms{Other: true}, Ordinal: Forms{Other: true},\n")
+	writef("PluralRulesByBase[undBase] = PluralRules{\n")
+	writef("\tCardinal: Rules{Other: true}, Ordinal: Rules{Other: true},\n")
 	writef("}\n")
 	writef("}\n")
-	writef("register := func(s string, cardinal, ordinal Forms, isBase bool) {\n")
+	writef("register := func(s string, cardinal, ordinal Rules, isBase bool) {\n")
 	writef("l, err := language.Parse(s)\n")
 	writef("if err != nil { panic(err) }\n")
-	writef("PluralFormsByTag[l] = PluralForms {cardinal, ordinal}\n")
+	writef("PluralRulesByTag[l] = PluralRules {cardinal, ordinal}\n")
 	writef("if isBase {\n")
 	writef("\tbase, _ := l.Base()\n")
-	writef("\tPluralFormsByBase[base] = PluralForms{cardinal, ordinal}")
+	writef("\tPluralRulesByBase[base] = PluralRules{cardinal, ordinal}")
 	writef("}")
 	writef("}\n")
 	for _, k := range cardinalsKeys {
@@ -168,7 +168,7 @@ func write(
 		base, _ := language.MustParse(k).Base()
 		isBase := base.String() == k
 
-		writef("register(%q,\nForms{Other: true,", k)
+		writef("register(%q,\nRules{Other: true,", k)
 		// Cardinal.
 		if fCardinal.Zero != "" {
 			writef("Zero: true, ")
@@ -186,7 +186,7 @@ func write(
 			writef("Many: true,")
 		}
 		// Ordinal.
-		writef("},\nForms{Other: true,")
+		writef("},\nRules{Other: true,")
 		if fOrdinal.Zero != "" {
 			writef("Zero: true, ")
 		}

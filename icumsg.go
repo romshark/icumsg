@@ -146,7 +146,7 @@ type Token struct {
 
 type Tokenizer struct {
 	loc    language.Tag
-	plural cldr.PluralForms
+	plural cldr.PluralRules
 	s      string
 	pos    int
 }
@@ -166,7 +166,7 @@ var (
 	ErrEmptyOption           = errors.New("empty option")
 	ErrDuplicateOption       = errors.New("duplicate option")
 	ErrInvalidOffset         = errors.New("invalid offset")
-	ErrUnsupportedPluralForm = errors.New("plural form unsupported for locale")
+	ErrUnsupportedPluralRule = errors.New("plural rule unsupported for locale")
 )
 
 // String returns a slice of the input string token t represents.
@@ -276,12 +276,12 @@ func completeness(
 	onIncomplete func(index int),
 	onRejected func(index int),
 ) (total int) {
-	var pluralForms cldr.PluralForms
-	{ // Select plural forms
+	var pluralRules cldr.PluralRules
+	{ // Select plural rules
 		var ok bool
-		if pluralForms, ok = cldr.PluralFormsByTag[locale]; !ok {
+		if pluralRules, ok = cldr.PluralRulesByTag[locale]; !ok {
 			base, _ := locale.Base()
-			pluralForms = cldr.PluralFormsByBase[base]
+			pluralRules = cldr.PluralRulesByBase[base]
 		}
 	}
 
@@ -295,15 +295,14 @@ func completeness(
 			if len(opts) != 0 {
 				reqCount := len(opts)
 				for j := range Options(buffer, i) {
-					if buffer[j].Type == TokenTypeOptionOther {
-						// Ignore other option.
+					if buffer[j].Type != TokenTypeOptionOther {
+						name := buffer[j+1].String(src, buffer)
+						if inOpts := slices.Contains(opts, name); inOpts {
+							reqCount--
+						} else if unknownPolicy == OptionUnknownPolicyReject {
+							onRejected(j)
+						}
 						continue
-					}
-					name := buffer[j+1].String(src, buffer)
-					if inOpts := slices.Contains(opts, name); inOpts {
-						reqCount--
-					} else if unknownPolicy == OptionUnknownPolicyReject {
-						onRejected(j)
 					}
 					total += completeness(
 						j, buffer[j].IndexEnd,
@@ -318,21 +317,21 @@ func completeness(
 			i = t.IndexEnd + 1
 		case TokenTypePlural:
 			total++
-			var forms cldr.Forms
+			var rules cldr.Rules
 			for j := range Options(buffer, i) {
 				switch buffer[j].Type {
 				case TokenTypeOptionZero:
-					forms.Zero = true
+					rules.Zero = true
 				case TokenTypeOptionOne:
-					forms.One = true
+					rules.One = true
 				case TokenTypeOptionTwo:
-					forms.Two = true
+					rules.Two = true
 				case TokenTypeOptionFew:
-					forms.Few = true
+					rules.Few = true
 				case TokenTypeOptionMany:
-					forms.Many = true
+					rules.Many = true
 				case TokenTypeOptionOther:
-					forms.Other = true
+					rules.Other = true
 				}
 				total += completeness(
 					j, buffer[j].IndexEnd,
@@ -340,27 +339,27 @@ func completeness(
 					selectOptions, onIncomplete, onRejected,
 				)
 			}
-			if forms != pluralForms.Cardinal {
+			if rules != pluralRules.Cardinal {
 				onIncomplete(i)
 			}
 			i = t.IndexEnd + 1
 		case TokenTypeSelectOrdinal:
 			total++
-			var forms cldr.Forms
+			var rules cldr.Rules
 			for j := range Options(buffer, i) {
 				switch buffer[j].Type {
 				case TokenTypeOptionZero:
-					forms.Zero = true
+					rules.Zero = true
 				case TokenTypeOptionOne:
-					forms.One = true
+					rules.One = true
 				case TokenTypeOptionTwo:
-					forms.Two = true
+					rules.Two = true
 				case TokenTypeOptionFew:
-					forms.Few = true
+					rules.Few = true
 				case TokenTypeOptionMany:
-					forms.Many = true
+					rules.Many = true
 				case TokenTypeOptionOther:
-					forms.Other = true
+					rules.Other = true
 				}
 				total += completeness(
 					j, buffer[j].IndexEnd,
@@ -368,7 +367,7 @@ func completeness(
 					selectOptions, onIncomplete, onRejected,
 				)
 			}
-			if forms != pluralForms.Ordinal {
+			if rules != pluralRules.Ordinal {
 				onIncomplete(i)
 			}
 			i = t.IndexEnd + 1
@@ -383,11 +382,11 @@ func (t *Tokenizer) Tokenize(
 ) ([]Token, error) {
 	t.loc, t.s, t.pos = locale, s, 0 // Reset tokenizer.
 
-	{ // Select plural forms
+	{ // Select plural rules
 		var ok bool
-		if t.plural, ok = cldr.PluralFormsByTag[t.loc]; !ok {
+		if t.plural, ok = cldr.PluralRulesByTag[t.loc]; !ok {
 			base, _ := t.loc.Base()
-			t.plural = cldr.PluralFormsByBase[base]
+			t.plural = cldr.PluralRulesByBase[base]
 		}
 	}
 
@@ -786,7 +785,7 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	return buffer, nil
 }
 
-func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Forms) ([]Token, error) {
+func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, error) {
 	start := t.pos
 	tp := TokenTypeOptionNumber
 	var initiatorBufIndex int
@@ -826,31 +825,31 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Forms) ([]Token, 
 		case "zero":
 			if !f.Zero {
 				t.pos = start // Rollback.
-				return buffer, ErrUnsupportedPluralForm
+				return buffer, ErrUnsupportedPluralRule
 			}
 			tp = TokenTypeOptionZero
 		case "one":
 			if !f.One {
 				t.pos = start // Rollback.
-				return buffer, ErrUnsupportedPluralForm
+				return buffer, ErrUnsupportedPluralRule
 			}
 			tp = TokenTypeOptionOne
 		case "two":
 			if !f.Two {
 				t.pos = start // Rollback.
-				return buffer, ErrUnsupportedPluralForm
+				return buffer, ErrUnsupportedPluralRule
 			}
 			tp = TokenTypeOptionTwo
 		case "few":
 			if !f.Few {
 				t.pos = start // Rollback.
-				return buffer, ErrUnsupportedPluralForm
+				return buffer, ErrUnsupportedPluralRule
 			}
 			tp = TokenTypeOptionFew
 		case "many":
 			if !f.Many {
 				t.pos = start // Rollback.
-				return buffer, ErrUnsupportedPluralForm
+				return buffer, ErrUnsupportedPluralRule
 			}
 			tp = TokenTypeOptionMany
 		case "other":

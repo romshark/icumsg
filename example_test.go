@@ -46,7 +46,7 @@ func ExampleTokenizer_error() {
 	}
 
 	// output:
-	// Error at index 50: plural form unsupported for locale
+	// Error at index 50: plural rule unsupported for locale
 }
 
 func ExampleCompleteness() {
