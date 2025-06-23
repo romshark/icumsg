@@ -5,7 +5,6 @@ package icumsg
 import (
 	"errors"
 	"iter"
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -242,139 +241,9 @@ const (
 	OptionUnknownPolicyReject
 )
 
-// Completeness returns the total number of choices in src.
-// onIncomplete is invoked when an incomplete, select, plural or selectordinal
-// is encountered.
-// onRejected is invoked when an unknown select option was encountered.
-// selectOptions is invoked when a select is encountered and if it returns
-// a slice then those will be the expected options the presence of which
-// will define whether the select is complete (depending on the policies returned).
-// selectOptions is not invoked for plural and selectordinal, instead locale is used
-// to determine what options are required.
-func Completeness(
-	src string,
-	buffer []Token,
-	locale language.Tag,
-	selectOptions func(argName string) (
-		[]string, OptionsPresencePolicy, OptionUnknownPolicy,
-	),
-	onIncomplete func(index int),
-	onRejected func(index int),
-) (total int) {
-	return completeness(0, len(buffer), src, buffer, locale,
-		selectOptions, onIncomplete, onRejected)
-}
-
-func completeness(
-	startIndex, endIndex int,
-	src string,
-	buffer []Token,
-	locale language.Tag,
-	selectOptions func(argName string) (
-		[]string, OptionsPresencePolicy, OptionUnknownPolicy,
-	),
-	onIncomplete func(index int),
-	onRejected func(index int),
-) (total int) {
-	var pluralRules cldr.PluralRules
-	{ // Select plural rules
-		var ok bool
-		if pluralRules, ok = cldr.PluralRulesByTag[locale]; !ok {
-			base, _ := locale.Base()
-			pluralRules = cldr.PluralRulesByBase[base]
-		}
-	}
-
-	for i := startIndex; i < endIndex; i++ {
-		t := buffer[i]
-		switch t.Type {
-		case TokenTypeSelect:
-			total++
-			tn := buffer[i+1]
-			opts, presencePolicy, unknownPolicy := selectOptions(tn.String(src, buffer))
-			if len(opts) != 0 {
-				reqCount := len(opts)
-				for j := range Options(buffer, i) {
-					if buffer[j].Type != TokenTypeOptionOther {
-						name := buffer[j+1].String(src, buffer)
-						if inOpts := slices.Contains(opts, name); inOpts {
-							reqCount--
-						} else if unknownPolicy == OptionUnknownPolicyReject {
-							onRejected(j)
-						}
-						continue
-					}
-					total += completeness(
-						j, buffer[j].IndexEnd,
-						src, buffer, locale,
-						selectOptions, onIncomplete, onRejected,
-					)
-				}
-				if presencePolicy == OptionsPresencePolicyRequired && reqCount != 0 {
-					onIncomplete(i)
-				}
-			}
-			i = t.IndexEnd + 1
-		case TokenTypePlural:
-			total++
-			var rules cldr.Rules
-			for j := range Options(buffer, i) {
-				switch buffer[j].Type {
-				case TokenTypeOptionZero:
-					rules.Zero = true
-				case TokenTypeOptionOne:
-					rules.One = true
-				case TokenTypeOptionTwo:
-					rules.Two = true
-				case TokenTypeOptionFew:
-					rules.Few = true
-				case TokenTypeOptionMany:
-					rules.Many = true
-				case TokenTypeOptionOther:
-					rules.Other = true
-				}
-				total += completeness(
-					j, buffer[j].IndexEnd,
-					src, buffer, locale,
-					selectOptions, onIncomplete, onRejected,
-				)
-			}
-			if rules != pluralRules.Cardinal {
-				onIncomplete(i)
-			}
-			i = t.IndexEnd + 1
-		case TokenTypeSelectOrdinal:
-			total++
-			var rules cldr.Rules
-			for j := range Options(buffer, i) {
-				switch buffer[j].Type {
-				case TokenTypeOptionZero:
-					rules.Zero = true
-				case TokenTypeOptionOne:
-					rules.One = true
-				case TokenTypeOptionTwo:
-					rules.Two = true
-				case TokenTypeOptionFew:
-					rules.Few = true
-				case TokenTypeOptionMany:
-					rules.Many = true
-				case TokenTypeOptionOther:
-					rules.Other = true
-				}
-				total += completeness(
-					j, buffer[j].IndexEnd,
-					src, buffer, locale,
-					selectOptions, onIncomplete, onRejected,
-				)
-			}
-			if rules != pluralRules.Ordinal {
-				onIncomplete(i)
-			}
-			i = t.IndexEnd + 1
-		}
-	}
-	return total
-}
+type SelectOptions func(argName string) (
+	[]string, OptionsPresencePolicy, OptionUnknownPolicy,
+)
 
 // Tokenize resets the tokenizer and appends any tokens encountered to buffer.
 func (t *Tokenizer) Tokenize(

@@ -49,14 +49,13 @@ func ExampleTokenizer_error() {
 	// Error at index 50: plural rule unsupported for locale
 }
 
-func ExampleCompleteness() {
-	// varNum is missing option "one"
-	// varGender is missing option "male"
+func ExampleErrors() {
 	// varGender lists unsupported option "unknown"
+	locale := language.Ukrainian
 	msg := `This message is valid but has incomplete plural and unknown select options:
-	{varNum, plural,
+	missing one: {varNum, plural,
 		other{
-			{varGender, select,
+			missing male: {varGender, select,
 				unknown{
 					varNum[other],varGender[unknown]
 				}
@@ -71,7 +70,7 @@ func ExampleCompleteness() {
 	}`
 
 	var tokenizer icumsg.Tokenizer
-	tokens, err := tokenizer.Tokenize(language.English, nil, msg)
+	tokens, err := tokenizer.Tokenize(locale, nil, msg)
 	if err != nil {
 		fmt.Printf("ERR: at index %d: %v\n", tokenizer.Pos(), err)
 		os.Exit(1)
@@ -80,8 +79,7 @@ func ExampleCompleteness() {
 	// Option "other" doesn't need to be included because it's always required.
 	optionsForVarGender := []string{"male", "female"}
 
-	var incomplete, rejected []string
-	totalChoices := icumsg.Completeness(msg, tokens, language.English,
+	errSeq := icumsg.Errors(locale, msg, tokens,
 		func(argName string) (
 			options []string,
 			policyPresence icumsg.OptionsPresencePolicy,
@@ -94,17 +92,94 @@ func ExampleCompleteness() {
 				return optionsForVarGender, policyPresence, policyUnknown
 			}
 			return nil, 0, 0
-		}, func(index int) {
+		})
+
+	for err := range errSeq {
+		switch e := err.(type) {
+		case icumsg.ErrorSelectMissingOption:
+			varName := tokens[e.TokenIndex+1].String(msg, tokens)
+			fmt.Printf("ERR at %s: %v\n", varName, err.Error())
+		case icumsg.ErrorPluralMissingOption:
+			varName := tokens[e.TokenIndex+1].String(msg, tokens)
+			fmt.Printf("ERR at %s: %v\n", varName, err.Error())
+		case icumsg.ErrorSelectInvalidOption:
+			varName := tokens[e.TokenIndexArgument+1].String(msg, tokens)
+			optName := tokens[e.TokenIndexOption+1].String(msg, tokens)
+			fmt.Printf("ERR at %s (option %q): %v\n", varName, optName, err.Error())
+		}
+	}
+
+	// output:
+	// ERR at varGender (option "unknown"): invalid select option
+	// ERR at varGender: missing select options [male]
+	// ERR at varNum: missing cardinal plural options [one,few,many]
+}
+
+func ExampleAnalyze() {
+	locale := language.English
+
+	// varGender lists unsupported option "unknown"
+	msg := `This message is valid but has incomplete plural and unknown select options:
+	missing one: {varNum, plural,
+		other{
+			missing male: {varGender, select,
+				unknown{
+					varNum[other],varGender[unknown]
+				}
+				female{
+					varNum[other],varGender[female]
+				}
+				other{
+					varNum[other],varGender[other]
+				}
+			}
+		}
+	}
+	complete: {varNum, plural,
+		one{-}
+		other{-}
+	}`
+
+	var tokenizer icumsg.Tokenizer
+	tokens, err := tokenizer.Tokenize(locale, nil, msg)
+	if err != nil {
+		fmt.Printf("ERR: at index %d: %v\n", tokenizer.Pos(), err)
+		os.Exit(1)
+	}
+
+	// Option "other" doesn't need to be included because it's always required.
+	optionsForVarGender := []string{"male", "female"}
+
+	var incomplete, rejected []string
+	totalChoices, err := icumsg.Analyze(locale, msg, tokens,
+		func(argName string) (
+			options []string,
+			policyPresence icumsg.OptionsPresencePolicy,
+			policyUnknown icumsg.OptionUnknownPolicy,
+		) {
+			if argName == "varGender" {
+				// Apply these policies and options only for argument "varGender"
+				policyPresence = icumsg.OptionsPresencePolicyRequired
+				policyUnknown = icumsg.OptionUnknownPolicyReject
+				return optionsForVarGender, policyPresence, policyUnknown
+			}
+			return nil, 0, 0
+		}, func(index int) error {
 			// This is called when an incomplete choice is encountered.
 			tArg, tName := tokens[index], tokens[index+1]
 			incomplete = append(incomplete,
 				tArg.Type.String()+": "+tName.String(msg, tokens))
-		}, func(index int) {
+			return nil
+		}, func(indexArgument, indexOption int) error {
 			// This is called when a rejected option is encountered.
-			tArg, tName := tokens[index], tokens[index+1]
-			rejected = append(rejected,
-				tArg.Type.String()+": "+tName.String(msg, tokens))
+			tArg, tName := tokens[indexArgument+1], tokens[indexOption+1]
+			rejected = append(rejected, fmt.Sprintf("%q: option %q",
+				tArg.String(msg, tokens), tName.String(msg, tokens)))
+			return nil
 		})
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Printf("totalChoices: %d\n", totalChoices)
 	fmt.Printf("incomplete (%d):\n", len(incomplete))
@@ -125,11 +200,11 @@ func ExampleCompleteness() {
 	}
 
 	// output:
-	// totalChoices: 2
+	// totalChoices: 3
 	// incomplete (2):
 	//  select argument: varGender
 	//  plural argument: varNum
 	// rejected (1):
-	//  option: unknown
-	// completeness: 0.00%
+	//  "varGender": option "unknown"
+	// completeness: 33.33%
 }

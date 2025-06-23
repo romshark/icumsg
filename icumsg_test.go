@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"golang.org/x/text/language"
@@ -844,7 +845,7 @@ func TestOptionsBreak(t *testing.T) {
 	test.RequireEqual(t, 1, itr)
 }
 
-func TestCompleteness(t *testing.T) {
+func TestAnalyze(t *testing.T) {
 	var tokenizer icumsg.Tokenizer
 	var buffer []icumsg.Token
 
@@ -864,18 +865,21 @@ func TestCompleteness(t *testing.T) {
 		buffer, err = tokenizer.Tokenize(locale, buffer, input)
 		test.RequireNoErr(t, err)
 		var incomplete, rejected []string
-		actualTotal := icumsg.Completeness(input, buffer, locale,
+		actualTotal, err := icumsg.Analyze(locale, input, buffer,
 			func(argName string) (
 				[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
 			) {
 				return options[argName], presencePolicy, unknownPolicy
 			},
-			func(index int) {
+			func(index int) error {
 				incomplete = append(incomplete, buffer[index].String(input, buffer))
+				return nil
 			},
-			func(index int) {
-				rejected = append(rejected, buffer[index].String(input, buffer))
+			func(indexArgument, indexOption int) error {
+				rejected = append(rejected, buffer[indexOption].String(input, buffer))
+				return nil
 			})
+		test.RequireNoErr(t, err)
 		test.RequireEqual(t, expectTotal, actualTotal, "total")
 		test.RequireDeepEqual(t, expectIncomplete, incomplete, "incomplete")
 		test.RequireDeepEqual(t, expectRejected, rejected, "rejected")
@@ -1033,6 +1037,288 @@ func TestCompleteness(t *testing.T) {
 			"c{c}",
 			"d{d}",
 		})
+}
+
+func TestCompletenessErrors(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	var buffer []icumsg.Token
+
+	optionsNone := func(argName string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return nil, 0, 0
+	}
+	optionsGender := func(argName string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		if strings.HasSuffix(argName, "_gender") {
+			return []string{"male", "female"},
+				icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
+		}
+		return nil, 0, 0
+	}
+
+	fn := func(
+		t *testing.T,
+		locale language.Tag,
+		input string,
+		options icumsg.SelectOptions,
+		checkErr func(t *testing.T, errs []error),
+	) {
+		t.Helper()
+		buffer = buffer[:0]
+		var err error
+		buffer, err = tokenizer.Tokenize(locale, buffer, input)
+		test.RequireNoErr(t, err, "tokenizer error")
+		errSeq := icumsg.Errors(locale, input, buffer, options)
+
+		var actual []error
+		for err := range errSeq {
+			actual = append(actual, err)
+		}
+
+		checkErr(t, actual)
+	}
+
+	checkMissingPlural := func(tp, missing string) func(t *testing.T, errs []error) {
+		return func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[0])
+			expect := fmt.Sprintf("missing %s plural options [%s]", tp, missing)
+			test.RequireEqual(t, expect, errs[0].Error())
+		}
+	}
+
+	checkNoErrs := func(t *testing.T, errs []error) { test.RequireEqual(t, 0, len(errs)) }
+
+	// Expect full completeness.
+	fn(t, language.English, "Simple literal text message", optionsNone, checkNoErrs)
+
+	fn(t, language.English,
+		"{var0, plural, one{1} other{2}}",
+		optionsNone, checkNoErrs)
+
+	fn(t, language.English,
+		"{var0_gender, select, other{2}}",
+		optionsNone, checkNoErrs)
+
+	fn(t, language.English,
+		"{var0_gender, select, female{1} male{2} other{3}}",
+		optionsGender, checkNoErrs)
+
+	fn(t, language.English,
+		"{var0, selectordinal, one{1} two{2} few{3} other{4}}",
+		optionsNone, checkNoErrs)
+
+	fn(t, language.Arabic,
+		"{var0, plural, zero{0} one{1} two{2} few{3} many{4} other{5}}",
+		optionsNone, checkNoErrs)
+
+	fn(t, language.MustParse("cy"),
+		"{var0, selectordinal, zero{0} one{1} two{2} few{3} many{4} other{5}}",
+		optionsNone, checkNoErrs)
+
+	// Expect invalid select option.
+	fn(t, language.English,
+		"unknown is wrong: {var0_gender, select, unknown{-} female{-} male{-} other{-}}",
+		optionsGender, func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorSelectInvalidOption](t, errs[0])
+			e := errs[0].(icumsg.ErrorSelectInvalidOption)
+			test.RequireEqual(t, 1, e.TokenIndexArgument)
+			test.RequireEqual(t, 3, e.TokenIndexOption)
+			test.RequireEqual(t, "invalid select option", errs[0].Error())
+		})
+
+	// Expect incomplete.
+	fn(t, language.English,
+		"missing cardinal: {var0, plural, other{o}}",
+		optionsNone, checkMissingPlural("cardinal", "one"))
+
+	fn(t, language.Ukrainian,
+		"missing cardinal: {var0, plural, other{o}}",
+		optionsNone, checkMissingPlural("cardinal", "one,few,many"))
+
+	fn(t, language.Arabic,
+		"missing cardinal: {var0, plural, other{o}}",
+		optionsNone, checkMissingPlural("cardinal", "zero,one,two,few,many"))
+
+	fn(t, language.Ukrainian,
+		"missing cardinal: {var0, plural, one{1} other{2}}",
+		optionsNone, checkMissingPlural("cardinal", "few,many"))
+
+	fn(t, language.Ukrainian,
+		"missing cardinal: {var0, plural, one{1} many{3} other{2}}",
+		optionsNone, checkMissingPlural("cardinal", "few"))
+
+	fn(t, language.Arabic,
+		"{var0, plural, one{1} two{2} few{3} many{4} other{5}}",
+		optionsNone, checkMissingPlural("cardinal", "zero"))
+
+	fn(t, language.Arabic,
+		"{var0, plural, zero{0} one{1} two{2} many{4} other{5}}",
+		optionsNone, checkMissingPlural("cardinal", "few"))
+
+	fn(t, language.English,
+		"missing ordinal: {var0, selectordinal, other{1}}",
+		optionsNone, checkMissingPlural("ordinal", "one,two,few"))
+
+	fn(t, language.English,
+		"missing ordinal: {var0, selectordinal, other{1} two{2}}",
+		optionsNone, checkMissingPlural("ordinal", "one,few"))
+
+	fn(t, language.English,
+		"{var0_gender, select, other{1}}",
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing select options [male,female]",
+				errs[0].Error())
+		})
+
+	fn(t, language.English,
+		"{var0_gender, select, male{2} other{3}}",
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing select options [female]",
+				errs[0].Error())
+		})
+
+	// Multiple.
+	fn(t, language.Ukrainian,
+		`
+			missing male: {var0_gender, select, female{0} other{3}}
+			missing female: {var1_gender, select, male{0} other{3}}
+			missing male and female: {var2_gender, select, other{3}}
+			missing few: {var3, selectordinal, other{3}}
+			missing few: {var4, plural, other{3}}
+		`,
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 5, len(errs))
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing select options [male]",
+				errs[0].Error())
+
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[1])
+			test.RequireEqual(t, "missing select options [female]",
+				errs[1].Error())
+
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[2])
+			test.RequireEqual(t, "missing select options [male,female]",
+				errs[2].Error())
+
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[3])
+			test.RequireEqual(t, "missing ordinal plural options [few]",
+				errs[3].Error())
+
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[4])
+			test.RequireEqual(t, "missing cardinal plural options [one,few,many]",
+				errs[4].Error())
+		})
+
+	// Nested.
+	fn(t, language.Ukrainian,
+		`{var0_gender, select, female{0} male{
+			{var1, plural, other{x}}
+		} other{3}}`,
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing cardinal plural options [one,few,many]",
+				errs[0].Error())
+		})
+
+	fn(t, language.Ukrainian,
+		`{var0, plural, one{-} few{-} many{
+			{var1, plural, one{-} other{-}}
+		} other{-}}`,
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing cardinal plural options [few,many]",
+				errs[0].Error())
+		})
+
+	fn(t, language.English,
+		`{var0, selectordinal, one{-} two{-} few{-} other{
+			{var1, selectordinal, one{-} other{-}}
+		}}`,
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing ordinal plural options [two,few]",
+				errs[0].Error())
+		})
+
+	// Multiple nested.
+	fn(t, language.English,
+		`missing female: {var0_gender, select, male{-} other{
+			missing two: {var1, selectordinal, one{-} few{-} other{
+				complete: {var2, plural, one{-} other{
+					missing one: {var3, plural, other{-}}
+				}}
+				missing and invalid: {var4_gender, select, none{-} male{-} other{-}}
+			}}
+		}}`,
+		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 5, len(errs))
+
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing cardinal plural options [one]",
+				errs[0].Error())
+
+			test.RequireErrType[icumsg.ErrorSelectInvalidOption](t, errs[1])
+			test.RequireEqual(t, "invalid select option",
+				errs[1].Error())
+
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[2])
+			test.RequireEqual(t, "missing select options [female]",
+				errs[2].Error())
+
+			test.RequireErrType[icumsg.ErrorPluralMissingOption](t, errs[3])
+			test.RequireEqual(t, "missing ordinal plural options [two]",
+				errs[3].Error())
+
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[4])
+			test.RequireEqual(t, "missing select options [female]",
+				errs[4].Error())
+
+		})
+}
+
+func TestCompletenessErrorsBreak(t *testing.T) {
+	optionsNone := func(argName string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return nil, 0, 0
+	}
+
+	locale := language.English
+	const input = `
+		first: {var0, plural, other{-}}
+		second: {var1, plural, other{-}}
+	`
+
+	var tokenizer icumsg.Tokenizer
+	buffer, err := tokenizer.Tokenize(locale, nil, input)
+	test.RequireNoErr(t, err, "tokenizer error")
+
+	errSeq := icumsg.Errors(locale, input, buffer, optionsNone)
+
+	var actual []error
+	for err := range errSeq {
+		actual = append(actual, err)
+		break
+	}
+	test.RequireEqual(t, 1, len(actual))
 }
 
 func Fuzz(f *testing.F) {

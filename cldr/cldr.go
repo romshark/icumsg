@@ -5,6 +5,15 @@ import (
 	"golang.org/x/text/language"
 )
 
+const (
+	RuleZero  = "zero"
+	RuleOne   = "one"
+	RuleTwo   = "two"
+	RuleFew   = "few"
+	RuleMany  = "many"
+	RuleOther = "other"
+)
+
 type PluralRules struct{ Zero, One, Two, Few, Many, Other bool }
 
 // LocalePluralRules returns cardinal and ordinal plural rules for locale.

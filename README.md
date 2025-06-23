@@ -85,12 +85,12 @@ func main() {
 }
 ```
 
-## ICU Message Completeness
+## Semantic Analysis
 
-ICU messages can be valid yet icomplete when missing some
-`select`, `plural` or `selectordinal` options.
-`icumsg.Completeness` allows you to inspect a message in detail,
-find unsupported select options and missing plural options.
+ICU messages can be syntactically valid yet incomplete when missing `select`, `plural` or
+`selectordinal` options required by the locale as well as semantically invalid when
+featuring unsupported `select` options.
+`icumsg.Analyze` allows you to inspect a message in detail and discover semantic issues.
 
 https://go.dev/play/p/U9t0a0XH9U_h
 
@@ -104,14 +104,29 @@ import (
 	"golang.org/x/text/language"
 )
 
+var optionsForVarGender = func(argName string) (
+	options []string,
+	policyPresence icumsg.OptionsPresencePolicy,
+	policyUnknown icumsg.OptionUnknownPolicy,
+) {
+	if argName == "varGender" {
+		// Apply these policies and options only for argument "varGender"
+		policyPresence = icumsg.OptionsPresencePolicyRequired
+		policyUnknown = icumsg.OptionUnknownPolicyReject
+		// Option "other" doesn't need to be included because it's always required.
+		return []string{"male", "female"}, policyPresence, policyUnknown
+	}
+	return nil, 0, 0
+}
+
 func main() {
-	// varNum is missing option "one"
-	// varGender is missing option "male"
+	locale := language.English
+
 	// varGender lists unsupported option "unknown"
 	msg := `This message is valid but has incomplete plural and unknown select options:
-	{varNum, plural,
+	missing one: {varNum, plural,
 		other{
-			{varGender, select,
+			missing male: {varGender, select,
 				unknown{
 					varNum[other],varGender[unknown]
 				}
@@ -123,10 +138,14 @@ func main() {
 				}
 			}
 		}
+	}
+	complete: {varNum, plural,
+		one{-}
+		other{-}
 	}`
 
 	var tokenizer icumsg.Tokenizer
-	tokens, err := tokenizer.Tokenize(language.English, nil, msg)
+	tokens, err := tokenizer.Tokenize(locale, nil, msg)
 	if err != nil {
 		fmt.Printf("ERR: at index %d: %v\n", tokenizer.Pos(), err)
 		os.Exit(1)
@@ -136,7 +155,7 @@ func main() {
 	optionsForVarGender := []string{"male", "female"}
 
 	var incomplete, rejected []string
-	totalChoices := icumsg.Completeness(msg, tokens, language.English,
+	totalChoices, err := icumsg.Analyze(locale, msg, tokens,
 		func(argName string) (
 			options []string,
 			policyPresence icumsg.OptionsPresencePolicy,
@@ -149,17 +168,22 @@ func main() {
 				return optionsForVarGender, policyPresence, policyUnknown
 			}
 			return nil, 0, 0
-		}, func(index int) {
+		}, func(index int) error {
 			// This is called when an incomplete choice is encountered.
 			tArg, tName := tokens[index], tokens[index+1]
 			incomplete = append(incomplete,
 				tArg.Type.String()+": "+tName.String(msg, tokens))
-		}, func(index int) {
+			return nil
+		}, func(indexArgument, indexOption int) error {
 			// This is called when a rejected option is encountered.
-			tArg, tName := tokens[index], tokens[index+1]
-			rejected = append(rejected,
-				tArg.Type.String()+": "+tName.String(msg, tokens))
+			tArg, tName := tokens[indexArgument+1], tokens[indexOption+1]
+			rejected = append(rejected, fmt.Sprintf("%q: option %q",
+				tArg.String(msg, tokens), tName.String(msg, tokens)))
+			return nil
 		})
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Printf("totalChoices: %d\n", totalChoices)
 	fmt.Printf("incomplete (%d):\n", len(incomplete))
@@ -180,12 +204,12 @@ func main() {
 	}
 
 	// output:
-	// totalChoices: 2
+	// totalChoices: 3
 	// incomplete (2):
 	//  select argument: varGender
 	//  plural argument: varNum
 	// rejected (1):
-	//  option: unknown
-	// completeness: 0.00%
+	//  "varGender": option "unknown"
+	// completeness: 33.33%
 }
 ```
