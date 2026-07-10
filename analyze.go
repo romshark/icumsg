@@ -200,7 +200,7 @@ func findAllSelectOptions(msg string, tokens []Token, index int) (has []string) 
 }
 
 // Analyze returns the total number of choices in src.
-// onIncomplete is invoked when an incomplete, select, plural or selectordinal
+// onIncomplete is invoked when an incomplete select, plural or selectordinal
 // is encountered.
 // onRejected is invoked when an unknown select option was encountered.
 // selectOptions is invoked when a select is encountered and if it returns

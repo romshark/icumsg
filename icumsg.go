@@ -1,4 +1,4 @@
-// Package icumsg provides an ICU Message Format
+// Package icumsg provides an ICU Message Format tokenizer.
 // (See https://unicode-org.github.io/icu/userguide/format_parse/messages/)
 package icumsg
 
@@ -43,7 +43,7 @@ const (
 	TokenTypeArgStyleCustom
 	TokenTypeArgStyleSkeleton
 
-	// TokenTypeOptionName is the select option. Always follows TokenTypeOption.
+	// TokenTypeOptionName is the option name. Always follows TokenTypeOption.
 	TokenTypeOptionName
 
 	// Complex. IndexEnd is an index of the token buffer.
@@ -560,7 +560,7 @@ func (t *Tokenizer) consumeSelectArg(
 		}
 	}
 
-	// +2 to skip [plural,argName]
+	// +2 to skip [select,argName]
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
@@ -791,7 +791,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	return buffer, nil
 }
 
-// consumeSelectOrdinalArg consumes the part of the select argument
+// consumeSelectOrdinalArg consumes the part of the selectordinal argument
 // after `{name, selectordinal,`
 func (t *Tokenizer) consumeSelectOrdinalArg(
 	buffer []Token, start, startName, endName int,
@@ -833,7 +833,7 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		}
 	}
 
-	// +2 to skip [plural,argName]
+	// +2 to skip [selectordinal,argName]
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
