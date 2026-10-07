@@ -373,6 +373,60 @@ func TestTokenize(t *testing.T) {
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
 
+	// Custom styles are string patterns that end at the first '}'
+	// that's neither quoted nor closing a '{' within the style.
+	f(t, language.English, "{n, number, #,##0.00}", []Token{
+		{Str: "{n, number, #,##0.00}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "#,##0.00", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	f(t, language.English, "{d, date, yyyy-MM-dd} after", []Token{
+		{Str: "{d, date, yyyy-MM-dd}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "d", Type: icumsg.TokenTypeArgName},
+		{Str: "date", Type: icumsg.TokenTypeArgTypeDate},
+		{Str: "yyyy-MM-dd", Type: icumsg.TokenTypeArgStyleCustom},
+		{Str: " after", Type: icumsg.TokenTypeLiteral},
+	}...)
+	f(t, language.English, "{d, date, EEE, MMM d }", []Token{
+		{Str: "{d, date, EEE, MMM d }", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "d", Type: icumsg.TokenTypeArgName},
+		{Str: "date", Type: icumsg.TokenTypeArgTypeDate},
+		{Str: "EEE, MMM d", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	f(t, language.English, "{n, spellout, %spellout-ordinal}", []Token{
+		{Str: "{n, spellout, %spellout-ordinal}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "spellout", Type: icumsg.TokenTypeArgTypeSpellout},
+		{Str: "%spellout-ordinal", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	// Every apostrophe in a style starts or ends quoted text.
+	f(t, language.English, "{t, time, h 'o''clock' a}", []Token{
+		{Str: "{t, time, h 'o''clock' a}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "t", Type: icumsg.TokenTypeArgName},
+		{Str: "time", Type: icumsg.TokenTypeArgTypeTime},
+		{Str: "h 'o''clock' a", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	f(t, language.English, "{n, number, #'}'}", []Token{
+		{Str: "{n, number, #'}'}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "#'}'", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	f(t, language.English, "{n, number, {#}}", []Token{
+		{Str: "{n, number, {#}}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "{#}", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+	// A keyword is only recognized as the whole style.
+	f(t, language.English, "{n, number, integer, foobar}", []Token{
+		{Str: "{n, number, integer, foobar}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "integer, foobar", Type: icumsg.TokenTypeArgStyleCustom},
+	}...)
+
 	// Plural
 	f(t, language.English, "{var,plural,other{#messages}one{#message}}", []Token{
 		{
@@ -721,6 +775,7 @@ var TestsErrors = []TestError{
 	{"{x, number , integer", 20, icumsg.ErrUnexpectedEOF},
 	{"{x, number , integer ", 21, icumsg.ErrUnexpectedEOF},
 	{"{x, number, ::", 14, icumsg.ErrUnexpectedEOF},
+	{"{x, number, {#}", 15, icumsg.ErrUnexpectedEOF}, // Unbalanced '{' in style.
 	{"{x,select, other", 16, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other ", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,select, other {", 18, icumsg.ErrUnexpectedEOF},
@@ -784,6 +839,8 @@ var TestsErrors = []TestError{
 	// The trailing apostrophe precedes '}' and opens a quote that swallows
 	// the closing brackets.
 	{"{g,select,other{'#{x}'}}", 21, icumsg.ErrUnclosedQuote},
+	// Every apostrophe in an argument style starts or ends quoted text.
+	{"{x, number, '#}", 12, icumsg.ErrUnclosedQuote},
 	// Unexpected token.
 	{"}", 0, icumsg.ErrUnexpectedToken},
 	{"prefix }", 7, icumsg.ErrUnexpectedToken},
@@ -824,7 +881,6 @@ var TestsErrors = []TestError{
 	{"{x_, selectordinal, other, one{x} }", 25, icumsg.ErrExpectBracketOpen},
 	{"{x_, select, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	// Expected closing bracket.
-	{"{n, number, integer, foobar}", 19, icumsg.ErrExpectBracketClose},
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
 	// Empty option.
 	{"{x,plural, other { } }", 17, icumsg.ErrEmptyOption},

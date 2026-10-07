@@ -458,6 +458,14 @@ func (t *Tokenizer) consumeArgType() (token Token) {
 	return Token{}
 }
 
+// consumeArgStyle consumes the argStyle of a simple argument.
+// As in [ICU MessageFormat], the style ends before the first '}' that's
+// neither quoted nor closes a '{' within the style, and every apostrophe
+// in it starts or ends quoted text. A custom style is thus a string
+// pattern that may contain any syntax, such as "#,##0.00" or "yyyy-MM-dd".
+// Trailing whitespace isn't part of the style.
+//
+// [ICU MessageFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessageFormat.html
 func (t *Tokenizer) consumeArgStyle() (token Token, err error) {
 	type TypeValPair struct {
 		Value string
@@ -465,26 +473,48 @@ func (t *Tokenizer) consumeArgStyle() (token Token, err error) {
 	}
 	start := t.pos
 
-	if strings.HasPrefix(t.s[t.pos:], "::") {
-		t.pos += 2 // Skip the leading "::".
-		if t.pos >= len(t.s) {
-			return Token{}, ErrUnexpectedEOF
-		}
-		if t.s[t.pos] == '}' {
-			return Token{}, ErrUnexpectedToken
-		}
-		for ; t.pos < len(t.s); t.pos++ {
-			if t.s[t.pos] == '}' {
-				return Token{
-					IndexStart: start,
-					IndexEnd:   t.pos,
-					Type:       TokenTypeArgStyleSkeleton,
-				}, nil
+	nestedBraces := 0
+LOOP:
+	for ; t.pos < len(t.s); t.pos++ {
+		switch t.s[t.pos] {
+		case '\'':
+			n := strings.IndexByte(t.s[t.pos+1:], '\'')
+			if n == -1 {
+				return Token{}, ErrUnclosedQuote
 			}
+			t.pos += 1 + n // Skip to the closing apostrophe.
+		case '{':
+			nestedBraces++
+		case '}':
+			if nestedBraces == 0 {
+				break LOOP
+			}
+			nestedBraces--
 		}
 	}
+	end := t.pos
+	for end > start && isWhitespace(t.s[end-1]) {
+		end--
+	}
+	t.pos = end
+	style := t.s[start:end]
 
-	for _, argType := range [...]TypeValPair{
+	if strings.HasPrefix(style, "::") {
+		if style == "::" {
+			t.pos = start + 2 // Rollback to after the "::".
+			if t.isEOF() {
+				return Token{}, ErrUnexpectedEOF
+			}
+			return Token{}, ErrUnexpectedToken
+		}
+		return Token{
+			IndexStart: start,
+			IndexEnd:   end,
+			Type:       TokenTypeArgStyleSkeleton,
+		}, nil
+	}
+
+	for _, argStyle := range [...]TypeValPair{
 		{"short", TokenTypeArgStyleShort},
 		{"medium", TokenTypeArgStyleMedium},
 		{"long", TokenTypeArgStyleLong},
@@ -493,28 +523,23 @@ func (t *Tokenizer) consumeArgStyle() (token Token, err error) {
 		{"currency", TokenTypeArgStyleCurrency},
 		{"percent", TokenTypeArgStylePercent},
 	} {
-		if strings.HasPrefix(t.s[t.pos:], argType.Value) {
-			t.pos += len(argType.Value) // Consume argType.
+		if style == argStyle.Value {
 			return Token{
 				IndexStart: start,
-				IndexEnd:   t.pos,
-				Type:       argType.Type,
+				IndexEnd:   end,
+				Type:       argStyle.Type,
 			}, nil
 		}
 	}
 
-	// Try to parse custom
-	end := indexOfArgNameEnd(t.s, t.pos)
-	if end != t.pos {
-		t.pos = end // Consume the custom arg style.
-		return Token{
-			IndexStart: start,
-			IndexEnd:   end,
-			Type:       TokenTypeArgStyleCustom,
-		}, nil
+	if style == "" {
+		return Token{}, nil
 	}
-
-	return Token{}, nil
+	return Token{
+		IndexStart: start,
+		IndexEnd:   end,
+		Type:       TokenTypeArgStyleCustom,
+	}, nil
 }
 
 func (t *Tokenizer) skipWhitespaces() {

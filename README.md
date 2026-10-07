@@ -67,13 +67,17 @@ Its successor MessageFormat 2.0
 ([UTS #35 Part 9](https://unicode.org/reports/tr35/tr35-messageFormat.html))
 defines a different syntax and is **not** supported.
 
-- Apostrophes follow ICU's default
+- Apostrophes in message text follow ICU's default
   [`ApostropheMode.DOUBLE_OPTIONAL`](https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessagePattern.ApostropheMode.html)
   ("quote only where needed"). A single apostrophe starts quoted text only when it
   immediately precedes a syntax character, which is `{`, `}` or `#` inside a `plural`
   or `selectordinal` option. Everywhere else it's literal text. `He's there` needs no
   escaping, unlike in JDK `MessageFormat`. A pair of apostrophes is one literal
   apostrophe.
+- Argument styles are keywords like `short`, skeletons like `::percent`, or string
+  patterns like `#,##0.00` and `yyyy-MM-dd`. A style ends at the first `}` that's
+  neither quoted nor closes a `{` within it. Every apostrophe in a style starts or ends
+  quoted text, as in `{t, time, h 'o''clock' a}`.
 - Plural rules are generated from [CLDR](https://cldr.unicode.org/) version 48.
   See [internal/cldr](internal/cldr/cldr_gen.go).
 
