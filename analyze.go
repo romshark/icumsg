@@ -271,7 +271,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd + 1
+			i = t.IndexEnd // Skip contents.
 		case TokenTypePlural:
 			total++
 			var rules cldr.PluralRules
@@ -305,7 +305,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd + 1
+			i = t.IndexEnd // Skip contents.
 		case TokenTypeSelectOrdinal:
 			total++
 			var rules cldr.PluralRules
@@ -339,7 +339,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd + 1
+			i = t.IndexEnd // Skip contents.
 		}
 	}
 	return total, nil

@@ -1233,6 +1233,24 @@ func TestAnalyze(t *testing.T) {
 			"c{c}",
 			"d{d}",
 		})
+
+	// Adjacent choices.
+	fn(t, language.English,
+		"{_0, select, other{a}}{_1, plural, other{b}}"+
+			"{_2, selectordinal, other{c}}{_3, plural, other{d}}",
+		nil, 0, 0, 4, []string{
+			"{_1, plural, other{b}}",
+			"{_2, selectordinal, other{c}}",
+			"{_3, plural, other{d}}",
+		}, nil)
+
+	// Adjacent choices nested in an option.
+	fn(t, language.English,
+		"{_0, plural, one{x} other{{_1, plural, other{a}}{_2, plural, other{b}}}}",
+		nil, 0, 0, 3, []string{
+			"{_1, plural, other{a}}",
+			"{_2, plural, other{b}}",
+		}, nil)
 }
 
 func TestCompletenessErrors(t *testing.T) {
