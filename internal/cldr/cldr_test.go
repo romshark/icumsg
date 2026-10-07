@@ -31,3 +31,18 @@ func TestPluralRulesByTag(t *testing.T) {
 	requireEqual(t, cldr.Rules{Other: true, One: true, Many: true}, p.Cardinal)
 	requireEqual(t, cldr.Rules{Other: true, One: true}, p.Ordinal)
 }
+
+func TestLookup(t *testing.T) {
+	requireEqual(t,
+		cldr.PluralRulesByTag[language.English],
+		cldr.Lookup(language.English))
+
+	// Haitian French falls back to "fr".
+	requireEqual(t, cldr.PluralRulesByTag[language.French],
+		cldr.Lookup(language.MustParse("fr-HT")))
+
+	// Latin has no CLDR plural data and falls back to the root locale.
+	requireEqual(t, cldr.PluralRules{
+		Cardinal: cldr.Rules{Other: true}, Ordinal: cldr.Rules{Other: true},
+	}, cldr.Lookup(language.MustParse("la")))
+}

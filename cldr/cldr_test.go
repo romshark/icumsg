@@ -74,4 +74,9 @@ func TestLocalePluralRules(t *testing.T) {
 		cldr.PluralRules{Other: true},
 		cldr.PluralRules{Other: true},
 	)
+	// Latin has no CLDR plural data and falls back to the root locale.
+	f(t, language.MustParse("la"),
+		cldr.PluralRules{Other: true},
+		cldr.PluralRules{Other: true},
+	)
 }

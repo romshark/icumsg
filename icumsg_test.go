@@ -776,6 +776,15 @@ var TestsErrorsLocale = []TestErrorLocale{
 		"{x,selectordinal, other{yes} zero{no}}", language.Ukrainian,
 		29, icumsg.ErrUnsupportedPluralRule,
 	},
+	// Without CLDR plural data, a locale has only "other".
+	{
+		"{x,plural, other{yes} one{no}}", language.MustParse("la"),
+		22, icumsg.ErrUnsupportedPluralRule,
+	},
+	{
+		"{x,selectordinal, other{yes} one{no}}", language.MustParse("la"),
+		29, icumsg.ErrUnsupportedPluralRule,
+	},
 }
 
 func TestTokenizeErrLocale(t *testing.T) {
@@ -1196,6 +1205,13 @@ func TestAnalyze(t *testing.T) {
 		"{_0, selectordinal, other{#a} zero{#b} one{#c} two{#d} few{#e} many{#f}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
+	// Without CLDR plural data, a locale only needs "other".
+	fn(t, language.MustParse("la"), "{_0, plural, other{# a}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
+	fn(t, language.MustParse("la"), "{_0, selectordinal, other{# a}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
 
 	// Expect full completeness for required options.
 	fn(t, language.English,
@@ -1447,6 +1463,11 @@ func TestCompletenessErrors(t *testing.T) {
 
 	fn(t, language.MustParse("cy"),
 		"{var0, selectordinal, zero{0} one{1} two{2} few{3} many{4} other{5}}",
+		optionsNone, checkNoErrs)
+
+	// Without CLDR plural data, a locale only needs "other".
+	fn(t, language.MustParse("la"),
+		"{var0, plural, other{0}} {var1, selectordinal, other{1}}",
 		optionsNone, checkNoErrs)
 
 	// Expect invalid select option.

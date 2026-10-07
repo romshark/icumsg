@@ -252,14 +252,7 @@ func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
 ) ([]Token, error) {
 	t.loc, t.s, t.pos = locale, s, 0 // Reset tokenizer.
-
-	{ // Select plural rules
-		var ok bool
-		if t.plural, ok = cldr.PluralRulesByTag[t.loc]; !ok {
-			base, _ := t.loc.Base()
-			t.plural = cldr.PluralRulesByBase[base]
-		}
-	}
+	t.plural = cldr.Lookup(t.loc)
 
 	if s == "" {
 		return buffer, nil

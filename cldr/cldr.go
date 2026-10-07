@@ -17,11 +17,10 @@ const (
 type PluralRules struct{ Zero, One, Two, Few, Many, Other bool }
 
 // LocalePluralRules returns cardinal and ordinal plural rules for locale.
+// If CLDR has no plural rules for locale, it falls back to those of the base
+// language of locale and then to those of the root locale [language.Und],
+// which has only "other".
 func LocalePluralRules(locale language.Tag) (cardinal, ordinal PluralRules) {
-	r, ok := cldr.PluralRulesByTag[locale]
-	if !ok {
-		base, _ := locale.Base()
-		r = cldr.PluralRulesByBase[base]
-	}
+	r := cldr.Lookup(locale)
 	return PluralRules(r.Cardinal), PluralRules(r.Ordinal)
 }
