@@ -204,8 +204,10 @@ func findAllSelectOptions(msg string, tokens []Token, index int) (has []string) 
 // is encountered.
 // onRejected is invoked when an unknown select option was encountered.
 // selectOptions is invoked when a select is encountered and if it returns
-// a slice then those will be the expected options the presence of which
+// a non-nil slice then those will be the expected options the presence of which
 // will define whether the select is complete (depending on the policies returned).
+// An empty non-nil slice expects no options besides "other".
+// A nil slice applies no policies.
 // selectOptions is not invoked for plural and selectordinal, instead locale is used
 // to determine what options are required.
 // If onIncomplete or onRejected returns an error it's returned immediately.
@@ -241,33 +243,32 @@ func analyze(
 			total++
 			tn := buffer[i+1]
 			opts, presencePolicy, unknownPolicy := selectOptions(tn.String(src, buffer))
-			if len(opts) != 0 {
-				reqCount := len(opts)
-				for j := range Options(buffer, i) {
-					if buffer[j].Type != TokenTypeOptionOther {
-						name := buffer[j+1].String(src, buffer)
-						if inOpts := slices.Contains(opts, name); inOpts {
-							reqCount--
-						} else if unknownPolicy == OptionUnknownPolicyReject {
-							if err := onRejected(i, j); err != nil {
-								return total, err
-							}
+			reqCount := len(opts)
+			for j := range Options(buffer, i) {
+				// A nil opts applies no policies.
+				if opts != nil && buffer[j].Type != TokenTypeOptionOther {
+					name := buffer[j+1].String(src, buffer)
+					if inOpts := slices.Contains(opts, name); inOpts {
+						reqCount--
+					} else if unknownPolicy == OptionUnknownPolicyReject {
+						if err := onRejected(i, j); err != nil {
+							return total, err
 						}
 					}
-					n, err := analyze(
-						j, buffer[j].IndexEnd,
-						src, buffer, locale,
-						selectOptions, onIncomplete, onRejected,
-					)
-					if err != nil {
-						return total, err
-					}
-					total += n
 				}
-				if presencePolicy == OptionsPresencePolicyRequired && reqCount != 0 {
-					if err := onIncomplete(i); err != nil {
-						return total, err
-					}
+				n, err := analyze(
+					j, buffer[j].IndexEnd,
+					src, buffer, locale,
+					selectOptions, onIncomplete, onRejected,
+				)
+				if err != nil {
+					return total, err
+				}
+				total += n
+			}
+			if presencePolicy == OptionsPresencePolicyRequired && reqCount != 0 {
+				if err := onIncomplete(i); err != nil {
+					return total, err
 				}
 			}
 			i = t.IndexEnd + 1

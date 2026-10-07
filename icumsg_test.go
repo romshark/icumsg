@@ -1108,6 +1108,17 @@ func TestAnalyze(t *testing.T) {
 		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
 		1, []string{"{_0, select, d{d} b{b} c{c} other{o}}"}, []string{"d{d}", "c{c}"})
 
+	// An empty non-nil slice of options allows only other.
+	fn(t, language.English, "unknown male: {_0, select, male{x} other{y}}",
+		map[string][]string{"_0": {}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, nil, []string{"male{x}"})
+
+	// A nil slice of options applies no policies.
+	fn(t, language.English, "{_0, select, male{x} other{y}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, nil, nil)
+
 	// Ignore unknown options.
 	fn(t, language.English,
 		"missing a and ignored unknown c,d: {_0, select, d{d} b{b} c{c} other{o}}",
@@ -1127,6 +1138,11 @@ func TestAnalyze(t *testing.T) {
 			"{_1, select, b{b} other{o}}",
 			"{_1, select, a{a} other{o}}",
 		}, nil)
+
+	// Nested plural in a select without options.
+	fn(t, language.English,
+		"missing one: {_0, select, male{{_1, plural, other{x}}} other{x}}",
+		nil, 0, 0, 2, []string{"{_1, plural, other{x}}"}, nil)
 
 	// Nested select in an =n option.
 	fn(t, language.English,
@@ -1385,6 +1401,11 @@ func TestCompletenessErrors(t *testing.T) {
 	// The nested "one" doesn't count toward the outer plural.
 	fn(t, language.English,
 		"{var0, plural, =0{{var1, plural, one{-} other{-}}} other{-}}",
+		optionsNone, checkMissingPlural("cardinal", "one"))
+
+	// Nested in a select without options.
+	fn(t, language.English,
+		"{var0, select, male{{var1, plural, other{-}}} other{-}}",
 		optionsNone, checkMissingPlural("cardinal", "one"))
 
 	// Multiple nested.
