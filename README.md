@@ -1,9 +1,6 @@
 <a href="https://pkg.go.dev/github.com/romshark/icumsg">
     <img src="https://godoc.org/github.com/romshark/icumsg?status.svg" alt="GoDoc">
 </a>
-<a href="https://goreportcard.com/report/github.com/romshark/icumsg">
-    <img src="https://goreportcard.com/badge/github.com/romshark/icumsg" alt="GoReportCard">
-</a>
 <a href='https://coveralls.io/github/romshark/icumsg?branch=main'>
     <img src='https://coveralls.io/repos/github/romshark/icumsg/badge.svg?branch=main&service=github' alt='Coverage Status' />
 </a>
