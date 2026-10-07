@@ -56,6 +56,34 @@ func main() {
 }
 ```
 
+## Specification
+
+This module implements **ICU MessageFormat 1.0** for ICU 4.8 and later, the message
+syntax of
+[`MessageFormat`](https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessageFormat.html)
+in ICU4J and ICU4C, as documented in the
+[ICU User Guide](https://unicode-org.github.io/icu/userguide/format_parse/messages/).
+Its successor MessageFormat 2.0
+([UTS #35 Part 9](https://unicode.org/reports/tr35/tr35-messageFormat.html))
+defines a different syntax and is **not** supported.
+
+- Apostrophes follow ICU's default
+  [`ApostropheMode.DOUBLE_OPTIONAL`](https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessagePattern.ApostropheMode.html)
+  ("quote only where needed"). A single apostrophe starts quoted text only when it
+  immediately precedes a syntax character, which is `{`, `}` or `#` inside a `plural`
+  or `selectordinal` option. Everywhere else it's literal text. `He's there` needs no
+  escaping, unlike in JDK `MessageFormat`. A pair of apostrophes is one literal
+  apostrophe.
+- Plural rules are generated from [CLDR](https://cldr.unicode.org/) version 47.
+  See [internal/cldr](internal/cldr/cldr_gen.go).
+
+Deviations from ICU:
+
+- `choice` arguments are not supported. ICU deprecated them in favor of `plural` and
+  `selectordinal`.
+- Unclosed quoted text is rejected with `ErrUnclosedQuote`. ICU instead auto-quotes it
+  to the end of the message.
+
 ## Error handling
 
 https://go.dev/play/p/NI6gXkcJJcH
@@ -99,25 +127,11 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/romshark/icumsg"
 	"golang.org/x/text/language"
 )
-
-var optionsForVarGender = func(argName string) (
-	options []string,
-	policyPresence icumsg.OptionsPresencePolicy,
-	policyUnknown icumsg.OptionUnknownPolicy,
-) {
-	if argName == "varGender" {
-		// Apply these policies and options only for argument "varGender"
-		policyPresence = icumsg.OptionsPresencePolicyRequired
-		policyUnknown = icumsg.OptionUnknownPolicyReject
-		// Option "other" doesn't need to be included because it's always required.
-		return []string{"male", "female"}, policyPresence, policyUnknown
-	}
-	return nil, 0, 0
-}
 
 func main() {
 	locale := language.English

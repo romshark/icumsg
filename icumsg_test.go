@@ -136,6 +136,89 @@ func TestTokenize(t *testing.T) {
 	f(t, language.English, "before '{x '' y}' after", []Token{
 		{Str: "before '{x '' y}' after", Type: icumsg.TokenTypeLiteral},
 	}...)
+	f(t, language.English, "a'}'b", []Token{
+		{Str: "a'}'b", Type: icumsg.TokenTypeLiteral},
+	}...)
+
+	// An apostrophe not immediately preceding a syntax character is literal text.
+	f(t, language.English, "This isn't obvious", []Token{
+		{Str: "This isn't obvious", Type: icumsg.TokenTypeLiteral},
+	}...)
+	f(t, language.English, "That's {n} messages", []Token{
+		{Str: "That's ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{n}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: " messages", Type: icumsg.TokenTypeLiteral},
+	}...)
+	f(t, language.English, "aujourd'hui", []Token{
+		{Str: "aujourd'hui", Type: icumsg.TokenTypeLiteral},
+	}...)
+	// A doubled apostrophe escapes one literal apostrophe.
+	f(t, language.English, "He''s here {n}", []Token{
+		{Str: "He''s here ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{n}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+	}...)
+	// Ordinary and quoting apostrophes in the same message.
+	f(t, language.English, "it's not '{arg}'", []Token{
+		{Str: "it's not '{arg}'", Type: icumsg.TokenTypeLiteral},
+	}...)
+	// A trailing apostrophe never opens a quote.
+	f(t, language.English, "{n} isn't", []Token{
+		{Str: "{n}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: " isn't", Type: icumsg.TokenTypeLiteral},
+	}...)
+
+	// '#' is a syntax character in plural and selectordinal options.
+	// An apostrophe preceding it starts quoted text.
+	f(t, language.English, "{n,plural,other{'#{x}' }}", []Token{
+		{Str: "{n,plural,other{'#{x}' }}", Type: icumsg.TokenTypePlural},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionOther},
+		{Str: "'#{x}' ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{n,plural,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
+	}...)
+	f(t, language.English, "{n,selectordinal,other{'#{x}' }}", []Token{
+		{Str: "{n,selectordinal,other{'#{x}' }}", Type: icumsg.TokenTypeSelectOrdinal},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionOther},
+		{Str: "'#{x}' ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{n,selectordinal,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
+	}...)
+	// The same sub-message in a select where '#' is not a syntax character.
+	// The apostrophes stay literal and {x} remains an argument.
+	f(t, language.English, "{g,select,other{'#{x}' }}", []Token{
+		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeSelect},
+		{Str: "g", Type: icumsg.TokenTypeArgName},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionOther},
+		{Str: "'#", Type: icumsg.TokenTypeLiteral},
+		{Str: "{x}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "x", Type: icumsg.TokenTypeArgName},
+		{Str: "' ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
+	}...)
+	// Only the immediately enclosing argument decides.
+	// '#' is not quotable in a select nested inside a plural.
+	f(t, language.English, "{n,plural,other{{g,select,other{'#{x}' }}}}", []Token{
+		{Str: "{n,plural,other{{g,select,other{'#{x}' }}}}", Type: icumsg.TokenTypePlural},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "other{{g,select,other{'#{x}' }}}", Type: icumsg.TokenTypeOptionOther},
+		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeSelect},
+		{Str: "g", Type: icumsg.TokenTypeArgName},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionOther},
+		{Str: "'#", Type: icumsg.TokenTypeLiteral},
+		{Str: "{x}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "x", Type: icumsg.TokenTypeArgName},
+		{Str: "' ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
+		{Str: "other{{g,select,other{'#{x}' }}}", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{n,plural,other{{g,select,other{'#{x}' }}}}", Type: icumsg.TokenTypeComplexArgTerm},
+	}...)
 
 	// Argument
 	f(t, language.English, "{_}", []Token{
@@ -640,12 +723,21 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, offset:0x1 other{foo}}", 19, icumsg.ErrInvalidOption},
 	{"{x,select, other { asd } =1 {x} }", 25, icumsg.ErrInvalidOption},
-	// Unclosed quote
-	{"prefix 'unclosed quote", 7, icumsg.ErrUnclosedQuote},
-	{"prefix '' 'unclosed quote", 10, icumsg.ErrUnclosedQuote},
-	{"prefix '{}' 'unclosed quote", 12, icumsg.ErrUnclosedQuote},
-	{"{x,plural, other { '{}' ' }}", 24, icumsg.ErrUnclosedQuote},
-	{"'", 0, icumsg.ErrUnclosedQuote},
+	// Unclosed quote.
+	// Every apostrophe below immediately precedes a syntax character.
+	{"prefix '{unclosed quote", 7, icumsg.ErrUnclosedQuote},
+	{"prefix '}unclosed quote", 7, icumsg.ErrUnclosedQuote},
+	{"prefix '' '{unclosed quote", 10, icumsg.ErrUnclosedQuote},
+	{"prefix '{}' '{unclosed quote", 12, icumsg.ErrUnclosedQuote},
+	{"{x,plural, other { '{}' '{ }}", 24, icumsg.ErrUnclosedQuote},
+	{"'{", 0, icumsg.ErrUnclosedQuote},
+	{"'}", 0, icumsg.ErrUnclosedQuote},
+	// '#' is a syntax character in a plural option.
+	{"{x,plural, other {'# }}", 18, icumsg.ErrUnclosedQuote},
+	{"{x,selectordinal, other {'# }}", 25, icumsg.ErrUnclosedQuote},
+	// The trailing apostrophe precedes '}' and opens a quote that swallows
+	// the closing brackets.
+	{"{g,select,other{'#{x}'}}", 21, icumsg.ErrUnclosedQuote},
 	// Unexpected token.
 	{"}", 0, icumsg.ErrUnexpectedToken},
 	{"prefix }", 7, icumsg.ErrUnexpectedToken},

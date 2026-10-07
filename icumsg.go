@@ -1,5 +1,6 @@
-// Package icumsg provides an ICU Message Format tokenizer.
-// (See https://unicode-org.github.io/icu/userguide/format_parse/messages/)
+// Package icumsg provides a tokenizer for ICU MessageFormat 1.0 (ICU 4.8 and later).
+// Its successor MessageFormat 2.0 (UTS #35 Part 9) is not supported.
+// See https://unicode-org.github.io/icu/userguide/format_parse/messages/
 package icumsg
 
 import (
@@ -262,10 +263,11 @@ func (t *Tokenizer) Tokenize(
 	if s == "" {
 		return buffer, nil
 	}
-	if strings.IndexByte(s, '\'') == -1 &&
-		strings.IndexByte(s, '{') == -1 &&
-		strings.IndexByte(s, '}') == -1 {
+	if strings.IndexByte(s, '{') == -1 && strings.IndexByte(s, '}') == -1 {
 		// Fast path for simple inputs.
+		// Without braces there's no quoted text because every syntax character
+		// an apostrophe can quote is a brace or appears only inside braces.
+		// See startsQuote.
 		return append(buffer, Token{
 			IndexStart: 0,
 			IndexEnd:   len(s),
@@ -274,7 +276,7 @@ func (t *Tokenizer) Tokenize(
 	}
 
 	var err error
-	buffer, err = t.consumeExpr(buffer)
+	buffer, err = t.consumeExpr(buffer, false)
 	if err != nil {
 		return buffer, err
 	}
@@ -284,7 +286,10 @@ func (t *Tokenizer) Tokenize(
 	return buffer, nil
 }
 
-func (t *Tokenizer) consumeExpr(buffer []Token) ([]Token, error) {
+// consumeExpr consumes a message or sub-message.
+// pluralStyle must be true inside a plural or selectordinal option.
+// See startsQuote.
+func (t *Tokenizer) consumeExpr(buffer []Token, pluralStyle bool) ([]Token, error) {
 	var err error
 	for t.pos < len(t.s) {
 		if t.s[t.pos] == '}' {
@@ -296,7 +301,7 @@ func (t *Tokenizer) consumeExpr(buffer []Token) ([]Token, error) {
 				return buffer, err
 			}
 		} else {
-			buffer, err = t.consumeLiteral(buffer)
+			buffer, err = t.consumeLiteral(buffer, pluralStyle)
 			if err != nil {
 				return buffer, err
 			}
@@ -630,7 +635,8 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	}
 
 	var err error
-	buffer, err = t.consumeExpr(buffer)
+	// '#' is not a syntax character in a select option.
+	buffer, err = t.consumeExpr(buffer, false)
 	if err != nil {
 		return buffer, err
 	}
@@ -767,7 +773,8 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	}
 
 	var err error
-	buffer, err = t.consumeExpr(buffer)
+	// '#' is a syntax character in plural and selectordinal options.
+	buffer, err = t.consumeExpr(buffer, true)
 	if err != nil {
 		return buffer, err
 	}
@@ -1061,7 +1068,31 @@ func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
 
 var endOfLiteral = [256]bool{'\'': true, '{': true, '}': true}
 
-func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
+// startsQuote reports whether an apostrophe immediately followed by b starts
+// quoted literal text. pluralStyle must be true inside a plural or
+// selectordinal option where '#' is a syntax character.
+//
+// ICU also quotes '|' inside choice arguments which this tokenizer doesn't support.
+func startsQuote(b byte, pluralStyle bool) bool {
+	return b == '{' || b == '}' || (pluralStyle && b == '#')
+}
+
+// consumeLiteral consumes literal text until the next unquoted '{' or '}'.
+// pluralStyle is passed through to startsQuote.
+//
+// Apostrophes follow ICU's default ApostropheMode.DOUBLE_OPTIONAL:
+//
+//   - A pair of apostrophes is one literal apostrophe, both inside and outside
+//     of quoted text.
+//   - A single apostrophe starts quoted text only where startsQuote allows it.
+//     Everywhere else it's literal text and needs no escaping, as in "aujourd'hui".
+//
+// Unclosed quoted text is rejected with ErrUnclosedQuote. ICU instead auto-quotes
+// it to the end of the message.
+//
+// See https://unicode-org.github.io/icu/userguide/format_parse/messages/#quotingescaping
+// and https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessagePattern.ApostropheMode.html
+func (t *Tokenizer) consumeLiteral(buffer []Token, pluralStyle bool) ([]Token, error) {
 	start := t.pos
 	inQuote := false
 	quoteStart := start
@@ -1111,10 +1142,16 @@ func (t *Tokenizer) consumeLiteral(buffer []Token) ([]Token, error) {
 				t.pos += 2 // skip both
 				continue
 			}
-			inQuote = !inQuote
 			if inQuote {
-				quoteStart = t.pos
+				inQuote = false
+				t.pos++
+				continue
 			}
+			if t.pos+1 >= len(t.s) || !startsQuote(t.s[t.pos+1], pluralStyle) {
+				t.pos++
+				continue
+			}
+			inQuote, quoteStart = true, t.pos
 			t.pos++
 			continue
 		}
