@@ -543,6 +543,45 @@ func TestTokenize(t *testing.T) {
 		},
 	}...)
 
+	// Whitespace at the start of an option is message text.
+	f(t, language.English, "{g,select,male{ he} other{  they}}", []Token{
+		{Str: "{g,select,male{ he} other{  they}}", Type: icumsg.TokenTypeSelect},
+		{Str: "g", Type: icumsg.TokenTypeArgName},
+		{Str: "male{ he}", Type: icumsg.TokenTypeOption},
+		{Str: "male", Type: icumsg.TokenTypeOptionName},
+		{Str: " he", Type: icumsg.TokenTypeLiteral},
+		{Str: "male{ he}", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "other{  they}", Type: icumsg.TokenTypeOptionOther},
+		{Str: "  they", Type: icumsg.TokenTypeLiteral},
+		{Str: "other{  they}", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{g,select,male{ he} other{  they}}", Type: icumsg.TokenTypeComplexArgTerm},
+	}...)
+
+	{ // Indentation in a multi-line message.
+		full := "{g,select,\n  male {\n    {n,plural,other{ #}}\n  }\n  other {x}\n}"
+		male := "male {\n    {n,plural,other{ #}}\n  }"
+		plural := "{n,plural,other{ #}}"
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypeSelect},
+			{Str: "g", Type: icumsg.TokenTypeArgName},
+			{Str: male, Type: icumsg.TokenTypeOption},
+			{Str: "male", Type: icumsg.TokenTypeOptionName},
+			{Str: "\n    ", Type: icumsg.TokenTypeLiteral},
+			{Str: plural, Type: icumsg.TokenTypePlural},
+			{Str: "n", Type: icumsg.TokenTypeArgName},
+			{Str: "other{ #}", Type: icumsg.TokenTypeOptionOther},
+			{Str: " #", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ #}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: plural, Type: icumsg.TokenTypeComplexArgTerm},
+			{Str: "\n  ", Type: icumsg.TokenTypeLiteral},
+			{Str: male, Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other {x}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "x", Type: icumsg.TokenTypeLiteral},
+			{Str: "other {x}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
 	{ // Nested choices.
 		// Nested choices.
 		// Male

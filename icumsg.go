@@ -645,7 +645,6 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 		return buffer, ErrExpectBracketOpen
 	}
 	t.pos++ // Consume the opening bracket.
-	t.skipWhitespaces()
 
 	{
 		afterOpeningBracket := t.pos
