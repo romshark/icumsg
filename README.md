@@ -74,7 +74,7 @@ defines a different syntax and is **not** supported.
   or `selectordinal` option. Everywhere else it's literal text. `He's there` needs no
   escaping, unlike in JDK `MessageFormat`. A pair of apostrophes is one literal
   apostrophe.
-- Plural rules are generated from [CLDR](https://cldr.unicode.org/) version 47.
+- Plural rules are generated from [CLDR](https://cldr.unicode.org/) version 48.
   See [internal/cldr](internal/cldr/cldr_gen.go).
 
 Deviations from ICU:
