@@ -995,27 +995,26 @@ func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) erro
 		case TokenTypeOptionNumber, TokenTypeOption:
 			nameToken := buffer[i+1]
 			name := t.s[nameToken.IndexStart:nameToken.IndexEnd]
-			// Check each other option.
+			// Check each other sibling option.
+			// Their contents are skipped because nested arguments may reuse names.
 			for j := bufIndex; j < len(buffer); j++ {
 				inner := buffer[j]
-				if j == i {
-					continue
-				}
 				switch inner.Type {
-				case outer.Type:
-					j++ // Skip the option and go straight to name.
-					inner = buffer[j]
-					inr := t.s[inner.IndexStart:inner.IndexEnd]
-					if name == inr {
-						t.pos = inner.IndexStart
-						return ErrDuplicateOption
-					}
-				case TokenTypeOptionZero,
+				case TokenTypeOption,
+					TokenTypeOptionZero,
 					TokenTypeOptionOne,
 					TokenTypeOptionTwo,
 					TokenTypeOptionFew,
 					TokenTypeOptionMany,
-					TokenTypeOptionOther:
+					TokenTypeOptionOther,
+					TokenTypeOptionNumber:
+					if j != i && inner.Type == outer.Type {
+						innerName := buffer[j+1]
+						if name == t.s[innerName.IndexStart:innerName.IndexEnd] {
+							t.pos = innerName.IndexStart
+							return ErrDuplicateOption
+						}
+					}
 					j = inner.IndexEnd // Skip contents.
 				}
 			}

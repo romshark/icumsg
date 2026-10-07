@@ -587,6 +587,52 @@ func TestTokenize(t *testing.T) {
 			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
 		}...)
 	}
+
+	// Nested arguments may reuse the option names of the enclosing argument.
+	f(t, language.English, "{a,select,x{{b,select,x{ok} other{ok}}} other{ok}}",
+		[]Token{
+			{Str: "{a,select,x{{b,select,x{ok} other{ok}}} other{ok}}", Type: icumsg.TokenTypeSelect},
+			{Str: "a", Type: icumsg.TokenTypeArgName},
+			{Str: "x{{b,select,x{ok} other{ok}}}", Type: icumsg.TokenTypeOption},
+			{Str: "x", Type: icumsg.TokenTypeOptionName},
+			{Str: "{b,select,x{ok} other{ok}}", Type: icumsg.TokenTypeSelect},
+			{Str: "b", Type: icumsg.TokenTypeArgName},
+			{Str: "x{ok}", Type: icumsg.TokenTypeOption},
+			{Str: "x", Type: icumsg.TokenTypeOptionName},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "x{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "{b,select,x{ok} other{ok}}", Type: icumsg.TokenTypeComplexArgTerm},
+			{Str: "x{{b,select,x{ok} other{ok}}}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "{a,select,x{{b,select,x{ok} other{ok}}} other{ok}}", Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	f(t, language.English, "{a,plural,=0{{b,plural,=0{ok} other{ok}}} other{ok}}",
+		[]Token{
+			{Str: "{a,plural,=0{{b,plural,=0{ok} other{ok}}} other{ok}}", Type: icumsg.TokenTypePlural},
+			{Str: "a", Type: icumsg.TokenTypeArgName},
+			{Str: "=0{{b,plural,=0{ok} other{ok}}}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
+			{Str: "{b,plural,=0{ok} other{ok}}", Type: icumsg.TokenTypePlural},
+			{Str: "b", Type: icumsg.TokenTypeArgName},
+			{Str: "=0{ok}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "=0{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "{b,plural,=0{ok} other{ok}}", Type: icumsg.TokenTypeComplexArgTerm},
+			{Str: "=0{{b,plural,=0{ok} other{ok}}}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "ok", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ok}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "{a,plural,=0{{b,plural,=0{ok} other{ok}}} other{ok}}", Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
 }
 
 type TestErrorLocale struct {
@@ -819,6 +865,15 @@ var TestsErrors = []TestError{
 	{"{n, select, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
+	// Duplicate option next to a nested argument reusing the option name.
+	{"{a,select,x{{b,select,x{ok} x{ok} other{ok}}} other{ok}}", 28,
+		icumsg.ErrDuplicateOption},
+	{"{a,select,x{{b,select,x{ok} other{ok}}} x{ok} other{ok}}", 40,
+		icumsg.ErrDuplicateOption},
+	{"{a,plural,=0{{b,plural,=0{ok} =0{ok} other{ok}}} other{ok}}", 30,
+		icumsg.ErrDuplicateOption},
+	{"{a,plural,=0{{b,plural,=0{ok} other{ok}}} =0{ok} other{ok}}", 42,
+		icumsg.ErrDuplicateOption},
 	// Missing option 'other'.
 	{"prefix {x,plural, }", 7, icumsg.ErrMissingOptionOther},
 	{"prefix {x,select, }", 7, icumsg.ErrMissingOptionOther},
