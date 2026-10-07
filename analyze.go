@@ -74,8 +74,9 @@ type ErrorSelectMissingOption struct {
 
 func (e ErrorSelectMissingOption) MissingOptions() iter.Seq[string] {
 	return func(yield func(string) bool) {
-		for _, n := range e.Need {
-			if slices.Index(e.Has, n) == -1 {
+		for i, n := range e.Need {
+			// Need may list an option more than once.
+			if slices.Index(e.Has, n) == -1 && slices.Index(e.Need[:i], n) == -1 {
 				if !yield(n) {
 					break
 				}
@@ -189,14 +190,32 @@ func findAllPluralOptions(tokens []Token, index int) (has cldr.PluralRules) {
 
 func findAllSelectOptions(msg string, tokens []Token, index int) (has []string) {
 	for t := range Options(tokens, index) {
-		switch tokens[t].Type {
-		case TokenTypeOptionOther:
-			has = append(has, "other")
-		case TokenTypeOption:
-			has = append(has, tokens[t+1].String(msg, tokens))
-		}
+		has = append(has, selectOptionName(msg, tokens, t))
 	}
 	return has
+}
+
+// hasSelectOptions reports whether the select at tokens[index] has an option
+// for each of names, comparing names like ErrorSelectMissingOption does.
+func hasSelectOptions(msg string, tokens []Token, index int, names []string) bool {
+NAMES:
+	for _, n := range names {
+		for t := range Options(tokens, index) {
+			if selectOptionName(msg, tokens, t) == n {
+				continue NAMES
+			}
+		}
+		return false
+	}
+	return true
+}
+
+// selectOptionName returns the name of the select option at tokens[index].
+func selectOptionName(msg string, tokens []Token, index int) string {
+	if tokens[index].Type == TokenTypeOptionOther {
+		return "other"
+	}
+	return tokens[index+1].String(msg, tokens)
 }
 
 // Analyze returns the total number of choices in src.
@@ -243,17 +262,13 @@ func analyze(
 			total++
 			tn := buffer[i+1]
 			opts, presencePolicy, unknownPolicy := selectOptions(tn.String(src, buffer))
-			reqCount := len(opts)
 			for j := range Options(buffer, i) {
 				// A nil opts applies no policies.
-				if opts != nil && buffer[j].Type != TokenTypeOptionOther {
-					name := buffer[j+1].String(src, buffer)
-					if inOpts := slices.Contains(opts, name); inOpts {
-						reqCount--
-					} else if unknownPolicy == OptionUnknownPolicyReject {
-						if err := onRejected(i, j); err != nil {
-							return total, err
-						}
+				if opts != nil && unknownPolicy == OptionUnknownPolicyReject &&
+					buffer[j].Type != TokenTypeOptionOther &&
+					!slices.Contains(opts, buffer[j+1].String(src, buffer)) {
+					if err := onRejected(i, j); err != nil {
+						return total, err
 					}
 				}
 				n, err := analyze(
@@ -266,7 +281,8 @@ func analyze(
 				}
 				total += n
 			}
-			if presencePolicy == OptionsPresencePolicyRequired && reqCount != 0 {
+			if presencePolicy == OptionsPresencePolicyRequired &&
+				!hasSelectOptions(src, buffer, i, opts) {
 				if err := onIncomplete(i); err != nil {
 					return total, err
 				}

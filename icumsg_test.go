@@ -1269,6 +1269,20 @@ func TestAnalyze(t *testing.T) {
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
 		1, nil, nil)
 
+	// Listing "other", which every select has, or listing a name twice is harmless.
+	fn(t, language.English, "{_0, select, a{a} b{b} other{o}}",
+		map[string][]string{"_0": {"a", "b", "other"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, nil, nil)
+	fn(t, language.English, "{_0, select, a{a} other{o}}",
+		map[string][]string{"_0": {"a", "a"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, nil, nil)
+	fn(t, language.English, "missing b: {_0, select, a{a} other{o}}",
+		map[string][]string{"_0": {"a", "b", "b", "other"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
+		1, []string{"{_0, select, a{a} other{o}}"}, nil)
+
 	// Ignore unknown options.
 	fn(t, language.English,
 		"missing a and ignored unknown c,d: {_0, select, d{d} b{b} c{c} other{o}}",
@@ -1365,6 +1379,14 @@ func TestCompletenessErrors(t *testing.T) {
 				icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
 		}
 		return nil, 0, 0
+	}
+	optionsRequired := func(options ...string) icumsg.SelectOptions {
+		return func(argName string) (
+			[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+		) {
+			return options,
+				icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
+		}
 	}
 
 	fn := func(
@@ -1489,6 +1511,25 @@ func TestCompletenessErrors(t *testing.T) {
 	fn(t, language.English,
 		"{var0_gender, select, male{2} other{3}}",
 		optionsGender,
+		func(t *testing.T, errs []error) {
+			test.RequireEqual(t, 1, len(errs))
+			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[0])
+			test.RequireEqual(t, "missing select options [female]",
+				errs[0].Error())
+		})
+
+	// Listing "other", which every select has, or listing a name twice is harmless.
+	fn(t, language.English,
+		"{var0, select, female{1} male{2} other{3}}",
+		optionsRequired("male", "female", "other"), checkNoErrs)
+
+	fn(t, language.English,
+		"{var0, select, male{1} other{2}}",
+		optionsRequired("male", "male"), checkNoErrs)
+
+	fn(t, language.English,
+		"{var0, select, male{1} other{2}}",
+		optionsRequired("male", "female", "female", "other"),
 		func(t *testing.T, errs []error) {
 			test.RequireEqual(t, 1, len(errs))
 			test.RequireErrType[icumsg.ErrorSelectMissingOption](t, errs[0])
