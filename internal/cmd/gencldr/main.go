@@ -62,38 +62,46 @@ func main() {
 	fPkgName := flag.String("pkgname", "cldr", "Output Go package name")
 	flag.Parse()
 
+	if err := generate(*fOut, *fPkgName); err != nil {
+		panic(err)
+	}
+}
+
+// generate writes the Go source for the embedded plural rules to the file at path.
+// The file is replaced only once the source has been generated and formatted,
+// so a failure leaves it as it was.
+func generate(path, pkgName string) error {
 	var ordinals ModelOrdinal
 	if err := json.Unmarshal(ordinalsJSON, &ordinals); err != nil {
-		panic(err)
+		return err
 	}
 
 	var cardinals ModelCardinal
 	if err := json.Unmarshal(cardinalsJSON, &cardinals); err != nil {
-		panic(err)
+		return err
 	}
-
-	f, err := os.OpenFile(*fOut, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			fmt.Println("ERR:", err)
-		}
-	}()
 
 	var buffer bytes.Buffer
 
-	write(&buffer, *fPkgName, &cardinals, &ordinals)
+	write(&buffer, pkgName, &cardinals, &ordinals)
 
 	formatted, err := format.Source(buffer.Bytes())
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	if _, err := f.Write(formatted); err != nil {
-		panic(err)
+	// Rename a fully written temporary file over path
+	// so that path is never left partially written.
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, formatted, 0o644); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func write(

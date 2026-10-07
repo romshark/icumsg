@@ -1,0 +1,43 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/romshark/icumsg/internal/test"
+)
+
+func TestGenerate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cldr_gen.go")
+	test.RequireNoErr(t, generate(path, "cldr"))
+
+	actual, err := os.ReadFile(path)
+	test.RequireNoErr(t, err)
+	expect, err := os.ReadFile("../../cldr/cldr_gen.go")
+	test.RequireNoErr(t, err)
+	if !bytes.Equal(expect, actual) {
+		t.Fatal("internal/cldr/cldr_gen.go is outdated, run go generate ./internal/cldr")
+	}
+}
+
+func TestGenerateErrKeepsFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cldr_gen.go")
+	const existing = "package cldr\n"
+	test.RequireNoErr(t, os.WriteFile(path, []byte(existing), 0o644))
+
+	// The invalid package name makes formatting fail.
+	if err := generate(path, "invalid-name"); err == nil {
+		t.Fatal("expected error")
+	}
+
+	actual, err := os.ReadFile(path)
+	test.RequireNoErr(t, err)
+	test.RequireEqual(t, existing, string(actual))
+
+	entries, err := os.ReadDir(dir)
+	test.RequireNoErr(t, err)
+	test.RequireEqual(t, 1, len(entries), "temporary file left behind")
+}
