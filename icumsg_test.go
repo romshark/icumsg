@@ -886,6 +886,10 @@ func TestOptions(t *testing.T) {
 		Token{Str: "one{a}", Type: icumsg.TokenTypeOptionOne},
 		Token{Str: "few{b}", Type: icumsg.TokenTypeOptionFew},
 		Token{Str: "two{c}", Type: icumsg.TokenTypeOptionTwo})
+	fn(t, "Prefix {x,plural,=0{zero} one{one} other{other}}", 1,
+		Token{Str: "=0{zero}", Type: icumsg.TokenTypeOptionNumber},
+		Token{Str: "one{one}", Type: icumsg.TokenTypeOptionOne},
+		Token{Str: "other{other}", Type: icumsg.TokenTypeOptionOther})
 
 	{
 		nested := `Prefix {x,plural,
@@ -919,6 +923,18 @@ func TestOptions(t *testing.T) {
 			Token{Str: `other  {B_OTHER}`, Type: icumsg.TokenTypeOptionOther},
 			Token{Str: `female {B_FEMALE}`, Type: icumsg.TokenTypeOption},
 			Token{Str: `male   {B_MALE}`, Type: icumsg.TokenTypeOption})
+	}
+
+	{
+		// Options nested in an =n option belong to the nested argument.
+		nested := "Prefix {x,plural,=0{{g,select,male{m} other{o}}} one{a} other{b}}"
+		fn(t, nested, 1, // plural
+			Token{Str: "=0{{g,select,male{m} other{o}}}", Type: icumsg.TokenTypeOptionNumber},
+			Token{Str: "one{a}", Type: icumsg.TokenTypeOptionOne},
+			Token{Str: "other{b}", Type: icumsg.TokenTypeOptionOther})
+		fn(t, nested, 5, // x=0
+			Token{Str: "male{m}", Type: icumsg.TokenTypeOption},
+			Token{Str: "other{o}", Type: icumsg.TokenTypeOptionOther})
 	}
 }
 
@@ -1111,6 +1127,23 @@ func TestAnalyze(t *testing.T) {
 			"{_1, select, b{b} other{o}}",
 			"{_1, select, a{a} other{o}}",
 		}, nil)
+
+	// Nested select in an =n option.
+	fn(t, language.English,
+		`missing b in =0: {_0, plural,
+			=0{    {_1, select, a{a} other{o}} }
+			one{   {_1, select, a{a} b{b} other{o}} }
+			other{ {_1, select, a{a} b{b} other{o}} }
+		}`,
+		map[string][]string{"_1": {"a", "b"}},
+		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		4, []string{"{_1, select, a{a} other{o}}"}, nil)
+
+	// Options of a plural nested in an =n option don't count toward the outer plural.
+	fn(t, language.English,
+		"missing one: {_0, plural, =0{{_1, plural, one{a} other{b}}} other{c}}",
+		nil, 0, 0, 2,
+		[]string{"{_0, plural, =0{{_1, plural, one{a} other{b}}} other{c}}"}, nil)
 
 	// Select in ordinal.
 	fn(t, language.English,
@@ -1348,6 +1381,11 @@ func TestCompletenessErrors(t *testing.T) {
 			test.RequireEqual(t, "missing ordinal plural options [two,few]",
 				errs[0].Error())
 		})
+
+	// The nested "one" doesn't count toward the outer plural.
+	fn(t, language.English,
+		"{var0, plural, =0{{var1, plural, one{-} other{-}}} other{-}}",
+		optionsNone, checkMissingPlural("cardinal", "one"))
 
 	// Multiple nested.
 	fn(t, language.English,

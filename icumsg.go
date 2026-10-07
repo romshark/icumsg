@@ -207,7 +207,8 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 				TokenTypeOptionTwo,
 				TokenTypeOptionFew,
 				TokenTypeOptionMany,
-				TokenTypeOptionOther:
+				TokenTypeOptionOther,
+				TokenTypeOptionNumber:
 				if !yield(ti) {
 					return
 				}
