@@ -13,6 +13,7 @@ import (
 
 	"github.com/romshark/icumsg"
 	"github.com/romshark/icumsg/cldr"
+	internalcldr "github.com/romshark/icumsg/internal/cldr"
 	"github.com/romshark/icumsg/internal/test"
 )
 
@@ -923,6 +924,64 @@ func TestTokenizeErrLocale(t *testing.T) {
 			test.RequireErrIs(t, tt.ExpectErr, err)
 			test.RequireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
 		})
+	}
+}
+
+func TestPluralRulesOfAllLocales(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	noOptions := func(string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return nil, 0, 0
+	}
+	categories := []struct {
+		name string
+		in   func(cldr.PluralRules) bool
+	}{
+		{"zero", func(r cldr.PluralRules) bool { return r.Zero }},
+		{"one", func(r cldr.PluralRules) bool { return r.One }},
+		{"two", func(r cldr.PluralRules) bool { return r.Two }},
+		{"few", func(r cldr.PluralRules) bool { return r.Few }},
+		{"many", func(r cldr.PluralRules) bool { return r.Many }},
+	}
+
+	for tag, rules := range internalcldr.PluralRulesByTag {
+		cardinal, ordinal := cldr.LocalePluralRules(tag)
+		test.RequireEqual(t, cldr.PluralRules(rules.Cardinal), cardinal, "%v", tag)
+		test.RequireEqual(t, cldr.PluralRules(rules.Ordinal), ordinal, "%v", tag)
+
+		for _, kind := range [...]struct {
+			arg   string
+			rules cldr.PluralRules
+		}{{"plural", cardinal}, {"selectordinal", ordinal}} {
+			// A choice with exactly the categories of the locale is complete.
+			msg := "{n, " + kind.arg + ","
+			for _, c := range categories {
+				if c.in(kind.rules) {
+					msg += " " + c.name + "{#}"
+				}
+			}
+			msg += " other{#}}"
+			tokens, err := tokenizer.Tokenize(tag, nil, msg)
+			test.RequireNoErr(t, err, "%v: %s", tag, msg)
+			total, err := icumsg.Analyze(tag, msg, tokens, noOptions,
+				func(int) error { return fmt.Errorf("%v: %s is incomplete", tag, msg) },
+				func(int, int) error { return nil })
+			test.RequireNoErr(t, err)
+			test.RequireEqual(t, 1, total, "%v: %s", tag, msg)
+
+			// Any other category is unsupported.
+			for _, c := range categories {
+				if c.in(kind.rules) {
+					continue
+				}
+				msg := "{n, " + kind.arg + ", other{#} " + c.name + "{#}}"
+				_, err := tokenizer.Tokenize(tag, nil, msg)
+				test.RequireErrIs(t, icumsg.ErrUnsupportedPluralRule, err, "%v: %s", tag, msg)
+				test.RequireEqual(t, strings.Index(msg, c.name+"{"), tokenizer.Pos(),
+					"%v: %s", tag, msg)
+			}
+		}
 	}
 }
 
