@@ -357,7 +357,22 @@ func TestTokenize(t *testing.T) {
 		{Str: "::sign-always", Type: icumsg.TokenTypeArgStyleSkeleton},
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
+	// A skeleton can have several stems.
+	f(t, language.English, "{n, number, ::compact-short currency/USD}", []Token{
+		{Str: "{n, number, ::compact-short currency/USD}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "::compact-short currency/USD", Type: icumsg.TokenTypeArgStyleSkeleton},
+	}...)
 
+	f(t, language.English, "Before {arg, number, currency} after", []Token{
+		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
+		{Str: "{arg, number, currency}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "arg", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "currency", Type: icumsg.TokenTypeArgStyleCurrency},
+		{Str: " after", Type: icumsg.TokenTypeLiteral},
+	}...)
 	f(t, language.English, "Before {arg, number, percent} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{arg, number, percent}", Type: icumsg.TokenTypeSimpleArg},
@@ -1103,6 +1118,10 @@ func TestOptions(t *testing.T) {
 		Token{Str: "=0{zero}", Type: icumsg.TokenTypeOptionNumber},
 		Token{Str: "one{one}", Type: icumsg.TokenTypeOptionOne},
 		Token{Str: "other{other}", Type: icumsg.TokenTypeOptionOther})
+	fn(t, "Prefix {x,plural,offset:1 =0{zero} one{one} other{other}}", 1,
+		Token{Str: "=0{zero}", Type: icumsg.TokenTypeOptionNumber},
+		Token{Str: "one{one}", Type: icumsg.TokenTypeOptionOne},
+		Token{Str: "other{other}", Type: icumsg.TokenTypeOptionOther})
 
 	{
 		nested := `Prefix {x,plural,
@@ -1235,6 +1254,9 @@ func TestAnalyze(t *testing.T) {
 	fn(t, language.English, "{_0, plural, =0{a} =1{b} one{# c} other{# d}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
+	fn(t, language.English, "{_0, plural, offset:1 =0{a} one{# b} other{# c}}",
+		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
+		1, nil, nil)
 	fn(t, language.Arabic,
 		"{_0, plural, one{# b} other{# a} few{# c} many{# d} zero{# e} two{# f}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
@@ -1296,9 +1318,18 @@ func TestAnalyze(t *testing.T) {
 		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
 
+	// Optional options don't keep unknown ones from being rejected.
+	fn(t, language.English,
+		"no bar and unknown baz: {_0, select, foo{foo} baz{baz} other{other}}",
+		map[string][]string{"_0": {"foo", "bar"}},
+		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyReject,
+		1, nil, []string{"baz{baz}"})
+
 	// Expect incomplete options.
 	fn(t, language.English, "missing one: {_0, plural, =0{a} =1{b} other{# d}}",
 		nil, 0, 0, 1, []string{"{_0, plural, =0{a} =1{b} other{# d}}"}, nil)
+	fn(t, language.English, "missing one: {_0, plural, offset:1 =0{a} other{# c}}",
+		nil, 0, 0, 1, []string{"{_0, plural, offset:1 =0{a} other{# c}}"}, nil)
 	fn(t, language.English, "missing one: {_0, plural, other{# a}}",
 		nil, 0, 0, 1, []string{"{_0, plural, other{# a}}"}, nil)
 	fn(t, language.Ukrainian, "missing: one,few,many: {_0, selectordinal, other{# a}}",
