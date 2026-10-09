@@ -1,6 +1,7 @@
 package icumsg_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/romshark/icumsg"
+	"github.com/romshark/icumsg/cldr"
 	"github.com/romshark/icumsg/internal/test"
 )
 
@@ -1430,6 +1432,46 @@ func TestAnalyze(t *testing.T) {
 		}, nil)
 }
 
+func TestAnalyzeCallbackErrors(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+
+	// Every select expects option "a" and rejects any other.
+	expectA := func(string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return []string{"a"},
+			icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
+	}
+	errStop := errors.New("stop")
+
+	// Unless Analyze returns the first error immediately,
+	// each input makes the callbacks run more than once.
+	for _, input := range [...]string{
+		// Rejected option.
+		"{s, select, x{-} other{-}} {t, select, y{-} other{-}}",
+		// Incomplete choice.
+		"{s, select, other{-}} {t, select, other{-}}",
+		"{s, plural, other{-}} {t, plural, other{-}}",
+		"{s, selectordinal, other{-}} {t, selectordinal, other{-}}",
+		// Incomplete choice in an option.
+		"{s, select, a{{n, plural, other{-}}} other{-}} {t, plural, other{-}}",
+		"{p, plural, one{{n, plural, other{-}}} other{-}} {t, plural, other{-}}",
+		"{p, selectordinal, one{{n, plural, other{-}}} two{-} few{-} other{-}}" +
+			" {t, plural, other{-}}",
+	} {
+		buffer, err := tokenizer.Tokenize(language.English, nil, input)
+		test.RequireNoErr(t, err, "input: %q", input)
+
+		calls := 0
+		stop := func() error { calls++; return errStop }
+		_, err = icumsg.Analyze(language.English, input, buffer, expectA,
+			func(int) error { return stop() },
+			func(int, int) error { return stop() })
+		test.RequireErrIs(t, errStop, err, "input: %q", input)
+		test.RequireEqual(t, 1, calls, "input: %q", input)
+	}
+}
+
 func TestCompletenessErrors(t *testing.T) {
 	var tokenizer icumsg.Tokenizer
 	var buffer []icumsg.Token
@@ -1728,30 +1770,65 @@ func TestCompletenessErrors(t *testing.T) {
 }
 
 func TestCompletenessErrorsBreak(t *testing.T) {
-	optionsNone := func(argName string) (
+	optionsGender := func(argName string) (
 		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
 	) {
-		return nil, 0, 0
+		return []string{"male", "female"},
+			icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
 	}
 
 	locale := language.English
-	const input = `
+	var tokenizer icumsg.Tokenizer
+
+	// Each input has more than one error.
+	for _, input := range [...]string{
+		`
 		first: {var0, plural, other{-}}
 		second: {var1, plural, other{-}}
-	`
+		`,
+		// The first error is an invalid option.
+		"{var0, select, unknown{-} male{-} female{-} other{-}} {var1, plural, other{-}}",
+	} {
+		buffer, err := tokenizer.Tokenize(locale, nil, input)
+		test.RequireNoErr(t, err, "tokenizer error")
 
-	var tokenizer icumsg.Tokenizer
-	buffer, err := tokenizer.Tokenize(locale, nil, input)
-	test.RequireNoErr(t, err, "tokenizer error")
+		errSeq := icumsg.Errors(locale, input, buffer, optionsGender)
 
-	errSeq := icumsg.Errors(locale, input, buffer, optionsNone)
+		var actual []error
+		for err := range errSeq {
+			actual = append(actual, err)
+			break
+		}
+		test.RequireEqual(t, 1, len(actual))
+	}
+}
 
-	var actual []error
-	for err := range errSeq {
-		actual = append(actual, err)
+func TestMissingOptionsBreak(t *testing.T) {
+	pluralErr := icumsg.ErrorPluralMissingOption{
+		Need: cldr.PluralRules{
+			Zero: true, One: true, Two: true, Few: true, Many: true, Other: true,
+		},
+		Has: cldr.PluralRules{Other: true},
+	}
+	missing := []string{"zero", "one", "two", "few", "many"}
+	for n := 1; n <= len(missing); n++ {
+		var actual []string
+		for o := range pluralErr.MissingOptions() {
+			actual = append(actual, o)
+			if len(actual) == n {
+				break
+			}
+		}
+		test.RequireDeepEqual(t, missing[:n], actual)
+	}
+
+	selectErr := icumsg.ErrorSelectMissingOption{Need: []string{"male", "female"}}
+	var actual []string
+	for o := range selectErr.MissingOptions() {
+		actual = append(actual, o)
 		break
 	}
-	test.RequireEqual(t, 1, len(actual))
+	test.RequireDeepEqual(t, []string{"male"}, actual)
 }
 
 func Fuzz(f *testing.F) {
