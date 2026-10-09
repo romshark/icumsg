@@ -19,13 +19,15 @@ type TokenType uint8
 const (
 	_ TokenType = iota
 
-	// Literal. IndexStart and IndexEnd are byte offsets in the input string.
+	// Literal. [Token.IndexStart] and [Token.IndexEnd] are
+	// byte offsets in the input string.
+
 	TokenTypeLiteral      // Any literal
 	TokenTypeSimpleArg    // { arg }
 	TokenTypePluralOffset // offset:1
 	TokenTypeArgName      // The name of any argument
 
-	// The following token types always follow TokenTypeArgName.
+	// The following token types always follow [TokenTypeArgName].
 	TokenTypeArgTypeNumber   // "You have {count, number} new messages."
 	TokenTypeArgTypeDate     // "Your appointment is on {appointmentDate, date}."
 	TokenTypeArgTypeTime     // "The train departs at {departureTime, time}."
@@ -34,6 +36,7 @@ const (
 	TokenTypeArgTypeDuration // "Estimated time: {seconds, duration}."
 
 	// The following token types always follow any argument type.
+
 	TokenTypeArgStyleShort
 	TokenTypeArgStyleMedium
 	TokenTypeArgStyleLong
@@ -44,10 +47,12 @@ const (
 	TokenTypeArgStyleCustom
 	TokenTypeArgStyleSkeleton
 
-	// TokenTypeOptionName is the option name. Always follows TokenTypeOption.
+	// TokenTypeOptionName is the option name. Always follows [TokenTypeOption].
 	TokenTypeOptionName
 
-	// Complex. IndexEnd is an index of the token buffer.
+	// Complex. [Token.IndexEnd] is the index of the terminator
+	// among the tokens of the message (see [Tokenizer.Tokenize]).
+
 	TokenTypePlural        // {arg, plural, ...}
 	TokenTypeSelect        // {arg, select, ...}
 	TokenTypeSelectOrdinal // {arg, selectordinal, ...}
@@ -60,7 +65,9 @@ const (
 	TokenTypeOptionOther   // other { ... }
 	TokenTypeOptionNumber  // =2 { ... }
 
-	// Terminator. IndexStart is an index of the token buffer.
+	// Terminator. [Token.IndexStart] is the index of the terminated token
+	// among the tokens of the message (see [Tokenizer.Tokenize]).
+
 	TokenTypeOptionTerm     // } Terminator of an option
 	TokenTypeComplexArgTerm // } Terminator of a complex argument
 )
@@ -138,8 +145,8 @@ func (t TokenType) String() string {
 }
 
 type Token struct {
-	// IndexStart and IndexEnd have different meaning depending on Type.
-	// See the token type groups.
+	// [Token.IndexStart] and [Token.IndexEnd] have different meaning
+	// depending on [Token.Type]. See the token type groups.
 	IndexStart, IndexEnd int
 	Type                 TokenType
 }
@@ -170,13 +177,14 @@ var (
 )
 
 // String returns a slice of the input string token t represents.
+// buffer must hold the tokens of s (see Tokenize).
 func (t Token) String(s string, buffer []Token) string {
 	if t.Type < TokenTypePlural {
 		return s[t.IndexStart:t.IndexEnd] // Literals
 	} else if t.Type > TokenTypeOptionNumber {
 		return s[buffer[t.IndexStart].IndexStart:t.IndexEnd] // Terminators
 	}
-	// t.Type >= TokenTypePlural && t.Type <= TokenTypeOptionNumber
+	// t.Type >= [TokenTypePlural] && t.Type <= [TokenTypeOptionNumber]
 	return s[t.IndexStart:buffer[t.IndexEnd].IndexEnd] // Complex
 }
 
@@ -185,9 +193,9 @@ func (t Token) String(s string, buffer []Token) string {
 // The iterator provides the indexes of option tokens.
 // Returns a no-op iterator if buffer[tokenIndex] is neither of:
 //
-//   - TokenTypeSelect
-//   - TokenTypePlural
-//   - TokenTypeSelectOrdinal
+//   - [TokenTypeSelect]
+//   - [TokenTypePlural]
+//   - [TokenTypeSelectOrdinal]
 func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 	var endIndex int
 	switch buffer[tokenIndex].Type {
@@ -212,7 +220,9 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 				if !yield(ti) {
 					return
 				}
-				ti = buffer[ti].IndexEnd // Skip contents.
+				// Skip contents, but never back, so that the tokens of more
+				// than one message (see Tokenize) can't make this loop forever.
+				ti = max(ti+1, buffer[ti].IndexEnd)
 			default:
 				ti++
 			}
@@ -247,7 +257,14 @@ type SelectOptions func(argName string) (
 	[]string, OptionsPresencePolicy, OptionUnknownPolicy,
 )
 
-// Tokenize resets the tokenizer and appends any tokens encountered to buffer.
+// Tokenize resets the tokenizer and appends the tokens of s to buffer.
+// Tokens link to each other by their index among the tokens of s,
+// so [Token.String], [Options], [Analyze] and [Errors] take the tokens of s
+// on their own, even if buffer wasn't empty:
+//
+//	n := len(buffer)
+//	buffer, err = tokenizer.Tokenize(locale, buffer, s)
+//	tokens := buffer[n:] // The tokens of s.
 func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
 ) ([]Token, error) {
@@ -269,8 +286,14 @@ func (t *Tokenizer) Tokenize(
 		}), nil
 	}
 
-	var err error
-	buffer, err = t.consumeExpr(buffer, false)
+	// Tokenize into an empty slice so that the indexes linking tokens
+	// count from the first token of s.
+	tokens, err := t.consumeExpr(buffer[len(buffer):], false)
+	if len(buffer) == 0 {
+		buffer = tokens
+	} else {
+		buffer = append(buffer, tokens...)
+	}
 	if err != nil {
 		return buffer, err
 	}
@@ -304,7 +327,8 @@ func (t *Tokenizer) consumeExpr(buffer []Token, pluralStyle bool) ([]Token, erro
 	return buffer, nil
 }
 
-// indexOfArgNameEnd returns the index of the first rune in s[i:] that is invalid in an ICU argName.
+// indexOfArgNameEnd returns the index of the first rune in s[i:]
+// that is invalid in an ICU argName.
 func indexOfArgNameEnd(s string, i int) int {
 	for j := i; j < len(s); {
 		r, size := rune(s[j]), 1
@@ -1104,8 +1128,8 @@ func startsQuote(b byte, pluralStyle bool) bool {
 //   - A single apostrophe starts quoted text only where startsQuote allows it.
 //     Everywhere else it's literal text and needs no escaping, as in "aujourd'hui".
 //
-// Unclosed quoted text is rejected with ErrUnclosedQuote. ICU instead auto-quotes
-// it to the end of the message.
+// Unclosed quoted text is rejected with ErrUnclosedQuote.
+// ICU instead auto-quotes it to the end of the message.
 //
 // See https://unicode-org.github.io/icu/userguide/format_parse/messages/#quotingescaping
 // and https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessagePattern.ApostropheMode.html

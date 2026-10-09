@@ -255,6 +255,8 @@ func analyze(
 ) (total int, err error) {
 	cardinal, ordinal := cldr.LocalePluralRules(locale)
 
+	// Skipping contents never goes back, so that the tokens of more than
+	// one message (see Tokenize) can't make this loop forever.
 	for i := startIndex; i < endIndex; i++ {
 		t := buffer[i]
 		switch t.Type {
@@ -287,7 +289,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd // Skip contents.
+			i = max(i, t.IndexEnd) // Skip contents.
 		case TokenTypePlural:
 			total++
 			var rules cldr.PluralRules
@@ -321,7 +323,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd // Skip contents.
+			i = max(i, t.IndexEnd) // Skip contents.
 		case TokenTypeSelectOrdinal:
 			total++
 			var rules cldr.PluralRules
@@ -355,7 +357,7 @@ func analyze(
 					return total, err
 				}
 			}
-			i = t.IndexEnd // Skip contents.
+			i = max(i, t.IndexEnd) // Skip contents.
 		}
 	}
 	return total, nil

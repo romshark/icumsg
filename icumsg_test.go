@@ -728,6 +728,54 @@ func TestTokenize(t *testing.T) {
 		}...)
 }
 
+func TestTokenizeAppend(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+
+	const first = "{a, plural, one{x} other{y}}"
+	const second = "{b, select, male{{n, plural, other{x}}} other{y}}"
+	expectFirst, err := tokenizer.Tokenize(language.English, nil, first)
+	test.RequireNoErr(t, err)
+	expectSecond, err := tokenizer.Tokenize(language.English, nil, second)
+	test.RequireNoErr(t, err)
+
+	noOptions := func(string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return nil, 0, 0
+	}
+
+	// Append in place and with buffer growing.
+	for _, capacity := range []int{64, len(expectFirst)} {
+		buffer := append(make([]icumsg.Token, 0, capacity), expectFirst...)
+		buffer, err = tokenizer.Tokenize(language.English, buffer, second)
+		test.RequireNoErr(t, err)
+
+		// The tokens of each message link to each other by their index
+		// among the tokens of that message.
+		n := len(expectFirst)
+		test.RequireDeepEqual(t, expectFirst, buffer[:n])
+		test.RequireDeepEqual(t, expectSecond, buffer[n:])
+
+		tokens := buffer[n:]
+		var incomplete []string
+		total, err := icumsg.Analyze(language.English, second, tokens, noOptions,
+			func(index int) error {
+				incomplete = append(incomplete, tokens[index].String(second, tokens))
+				return nil
+			},
+			func(int, int) error { return nil })
+		test.RequireNoErr(t, err)
+		test.RequireEqual(t, 2, total)
+		test.RequireDeepEqual(t, []string{"{n, plural, other{x}}"}, incomplete)
+
+		// Given the tokens of more than one message, Analyze still returns.
+		buffer, err = tokenizer.Tokenize(language.English, buffer, first)
+		test.RequireNoErr(t, err)
+		_, _ = icumsg.Analyze(language.English, second, buffer, noOptions,
+			func(int) error { return nil }, func(int, int) error { return nil })
+	}
+}
+
 type TestErrorLocale struct {
 	Input          string
 	Locale         language.Tag
