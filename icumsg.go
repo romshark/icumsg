@@ -887,8 +887,6 @@ func (t *Tokenizer) consumeSelectOrdinalArg(
 		return buffer, err
 	}
 
-	// TODO: check illegal options relative to the selected base lang.
-
 	// Link the argument initiator to the argument terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
 	buffer = append(buffer, Token{
