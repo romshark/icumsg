@@ -41,3 +41,37 @@ func TestGenerateErrKeepsFile(t *testing.T) {
 	test.RequireNoErr(t, err)
 	test.RequireEqual(t, 1, len(entries), "temporary file left behind")
 }
+
+func TestGenerateErrRename(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cldr_gen.go")
+	// Renaming the temporary file fails because a directory is in the way.
+	test.RequireNoErr(t, os.Mkdir(path, 0o755))
+	test.RequireNoErr(t, os.WriteFile(filepath.Join(path, "file"), nil, 0o644))
+
+	if err := generate(path, "cldr"); err == nil {
+		t.Fatal("expected error")
+	}
+
+	entries, err := os.ReadDir(path)
+	test.RequireNoErr(t, err)
+	test.RequireEqual(t, 1, len(entries), "directory in the way changed")
+
+	entries, err = os.ReadDir(dir)
+	test.RequireNoErr(t, err)
+	test.RequireEqual(t, 1, len(entries), "temporary file left behind")
+}
+
+func TestGenerateErrWrite(t *testing.T) {
+	dir := t.TempDir()
+	// Writing the temporary file fails because its directory is missing.
+	path := filepath.Join(dir, "missing", "cldr_gen.go")
+
+	if err := generate(path, "cldr"); err == nil {
+		t.Fatal("expected error")
+	}
+
+	entries, err := os.ReadDir(dir)
+	test.RequireNoErr(t, err)
+	test.RequireEqual(t, 0, len(entries), "file created")
+}
