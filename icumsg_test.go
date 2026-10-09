@@ -793,6 +793,10 @@ var TestsErrorsLocale = []TestErrorLocale{
 		22, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
+		"{x,selectordinal, other{yes} many{no}}", language.AmericanEnglish,
+		29, icumsg.ErrUnsupportedPluralRule,
+	},
+	{
 		"{x,plural, other{yes} zero{no}}", language.Ukrainian,
 		22, icumsg.ErrUnsupportedPluralRule,
 	},
