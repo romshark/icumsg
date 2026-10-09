@@ -159,6 +159,7 @@ type Tokenizer struct {
 }
 
 // Pos returns the last position (byte offset in the input string) the tokenizer was at.
+// That's where Tokenize found an error, or the end of the input if it succeeded.
 func (t *Tokenizer) Pos() int { return t.pos }
 
 var (
@@ -279,6 +280,7 @@ func (t *Tokenizer) Tokenize(
 		// Without braces there's no quoted text because every syntax character
 		// an apostrophe can quote is a brace or appears only inside braces.
 		// See startsQuote.
+		t.pos = len(s)
 		return append(buffer, Token{
 			IndexStart: 0,
 			IndexEnd:   len(s),

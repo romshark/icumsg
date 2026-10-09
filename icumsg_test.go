@@ -116,6 +116,7 @@ func TestTokenize(t *testing.T) {
 		buffer = buffer[:0]
 		buffer, err := tokenizer.Tokenize(locale, buffer, input)
 		test.RequireNoErr(t, err)
+		test.RequireEqual(t, len(input), tokenizer.Pos(), "Pos() after %q", input)
 		actual := ToTestTokens(input, buffer, buffer)
 		compareTokens(t, expect, actual)
 	}
