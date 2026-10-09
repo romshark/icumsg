@@ -337,8 +337,7 @@ func indexOfArgNameEnd(s string, i int) int {
 		if r >= utf8.RuneSelf {
 			r, size = utf8.DecodeRuneInString(s[j:])
 		}
-		if unicode.Is(unicode.Pattern_Syntax, r) ||
-			unicode.Is(unicode.Pattern_White_Space, r) {
+		if unicode.Is(unicode.Pattern_Syntax, r) || isWhitespace(r) {
 			return j
 		}
 		j += size
@@ -511,12 +510,9 @@ LOOP:
 			nestedBraces--
 		}
 	}
-	end := t.pos
-	for end > start && isWhitespace(t.s[end-1]) {
-		end--
-	}
+	style := strings.TrimRightFunc(t.s[start:t.pos], isWhitespace)
+	end := start + len(style)
 	t.pos = end
-	style := t.s[start:end]
 
 	if strings.HasPrefix(style, "::") {
 		if style == "::" {
@@ -562,10 +558,15 @@ LOOP:
 }
 
 func (t *Tokenizer) skipWhitespaces() {
-	for ; t.pos < len(t.s); t.pos++ {
-		if !isWhitespace(t.s[t.pos]) {
-			break
+	for t.pos < len(t.s) {
+		r, size := rune(t.s[t.pos]), 1
+		if r >= utf8.RuneSelf {
+			r, size = utf8.DecodeRuneInString(t.s[t.pos:])
 		}
+		if !isWhitespace(r) {
+			return
+		}
+		t.pos += size
 	}
 }
 
@@ -730,13 +731,15 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 			return buffer, ErrInvalidOption // Leading zero is illegal.
 		}
 	} else {
-	LOOP:
-		for ; t.pos < len(t.s); t.pos++ {
-			b := t.s[t.pos]
-			switch b {
-			case '{', '}', ',', ' ', '\t', '\n', '\r':
-				break LOOP
+		for t.pos < len(t.s) {
+			r, size := rune(t.s[t.pos]), 1
+			if r >= utf8.RuneSelf {
+				r, size = utf8.DecodeRuneInString(t.s[t.pos:])
 			}
+			if r == '{' || r == '}' || r == ',' || isWhitespace(r) {
+				break
+			}
+			t.pos += size
 		}
 
 		option := t.s[start:t.pos]
@@ -1069,8 +1072,13 @@ func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) erro
 	return nil
 }
 
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+// isWhitespace reports whether r is Pattern_White_Space,
+// which ICU skips between syntax elements.
+func isWhitespace(r rune) bool {
+	if r < utf8.RuneSelf {
+		return r == ' ' || ('\t' <= r && r <= '\r')
+	}
+	return unicode.Is(unicode.Pattern_White_Space, r)
 }
 
 func (t *Tokenizer) isEOF() bool { return t.pos >= len(t.s) }

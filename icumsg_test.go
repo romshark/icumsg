@@ -795,6 +795,57 @@ func TestTokenizeAppend(t *testing.T) {
 	}
 }
 
+func TestTokenizePatternWhiteSpace(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+
+	const template = "{ n , plural , offset: 1 one { # } other { # } }" +
+		"{ g , select , male { m } other { o } }{ d , date , short }"
+	expect := []Token{
+		{Str: "{ n , plural , offset: 1 one { # } other { # } }", Type: icumsg.TokenTypePlural},
+		{Str: "n", Type: icumsg.TokenTypeArgName},
+		{Str: "1", Type: icumsg.TokenTypePluralOffset},
+		{Str: "one { # }", Type: icumsg.TokenTypeOptionOne},
+		{Str: " # ", Type: icumsg.TokenTypeLiteral},
+		{Str: "one { # }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "other { # }", Type: icumsg.TokenTypeOptionOther},
+		{Str: " # ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other { # }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{ n , plural , offset: 1 one { # } other { # } }", Type: icumsg.TokenTypeComplexArgTerm},
+		{Str: "{ g , select , male { m } other { o } }", Type: icumsg.TokenTypeSelect},
+		{Str: "g", Type: icumsg.TokenTypeArgName},
+		{Str: "male { m }", Type: icumsg.TokenTypeOption},
+		{Str: "male", Type: icumsg.TokenTypeOptionName},
+		{Str: " m ", Type: icumsg.TokenTypeLiteral},
+		{Str: "male { m }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "other { o }", Type: icumsg.TokenTypeOptionOther},
+		{Str: " o ", Type: icumsg.TokenTypeLiteral},
+		{Str: "other { o }", Type: icumsg.TokenTypeOptionTerm},
+		{Str: "{ g , select , male { m } other { o } }", Type: icumsg.TokenTypeComplexArgTerm},
+		{Str: "{ d , date , short }", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "d", Type: icumsg.TokenTypeArgName},
+		{Str: "date", Type: icumsg.TokenTypeArgTypeDate},
+		{Str: "short", Type: icumsg.TokenTypeArgStyleShort},
+	}
+
+	// Like ICU, skip any Pattern_White_Space between syntax elements.
+	for _, ws := range []rune{
+		'\t', '\n', '\v', '\f', '\r', ' ',
+		'\u0085', '\u200e', '\u200f', '\u2028', '\u2029',
+	} {
+		t.Run(fmt.Sprintf("%U", ws), func(t *testing.T) {
+			input := strings.ReplaceAll(template, " ", string(ws))
+			buffer, err := tokenizer.Tokenize(language.English, nil, input)
+			test.RequireNoErr(t, err)
+
+			expectWS := make([]Token, len(expect))
+			for i, e := range expect {
+				expectWS[i] = Token{Str: strings.ReplaceAll(e.Str, " ", string(ws)), Type: e.Type}
+			}
+			compareTokens(t, expectWS, ToTestTokens(input, buffer, buffer))
+		})
+	}
+}
+
 type TestErrorLocale struct {
 	Input          string
 	Locale         language.Tag
