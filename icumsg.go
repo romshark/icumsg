@@ -237,7 +237,7 @@ type OptionsPresencePolicy int8
 const (
 	// OptionsPresencePolicyOptional does not require all select options to be present
 	// for the ICU message to be considered complete.
-	OptionsPresencePolicyOptional = iota
+	OptionsPresencePolicyOptional OptionsPresencePolicy = iota
 
 	// OptionsPresencePolicyRequired requires all select options to be present
 	// for the ICU message to be considered complete.
