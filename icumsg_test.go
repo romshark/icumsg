@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1872,17 +1873,184 @@ func Fuzz(f *testing.F) {
 	}
 	f.Add("Very small")
 	f.Add("Good morning {userName}, how are you?")
+	f.Add("{n, plural, offset:1 =0{none} one{# item} other{# items}}")
+	f.Add("{n, plural, zero{a} one{b} two{c} few{d} many{e} other{f}}")
+	f.Add("{n, selectordinal, one{#st} two{#nd} few{#rd} other{#th}}")
+	f.Add("{d, date, yyyy-MM-dd} '{literal}' it's {t, time, h 'o''clock' a}")
 	f.Add(ReadFile[string](f, "testdata/lorem_ipsum.txt"))
 	f.Add(ReadFile[string](f, "testdata/lorem_ipsum_args.icu.txt"))
 	f.Add(ReadFile[string](f, "testdata/nested.icu.txt"))
+
+	// Locales with few plural categories, with all of them,
+	// and without CLDR plural data.
+	locales := []language.Tag{
+		language.English, language.Japanese, language.Ukrainian,
+		language.Arabic, language.MustParse("cy"), language.MustParse("la"),
+	}
 
 	var tokenizer icumsg.Tokenizer
 	buffer := make([]icumsg.Token, 0, 64)
 
 	f.Fuzz(func(t *testing.T, input string) {
-		buffer = buffer[:0]
-		_, _ = tokenizer.Tokenize(language.English, buffer, input)
+		for _, locale := range locales {
+			var err error
+			buffer, err = tokenizer.Tokenize(locale, buffer[:0], input)
+			if err != nil {
+				if p := tokenizer.Pos(); p < 0 || p > len(input) {
+					t.Fatalf("%v: Pos() = %d after error %v", locale, p, err)
+				}
+				continue
+			}
+			checkTokens(t, &tokenizer, locale, input, buffer)
+		}
 	})
+}
+
+// checkTokens checks the tokens of input, which tokenizer tokenized successfully.
+func checkTokens(
+	t *testing.T, tokenizer *icumsg.Tokenizer,
+	locale language.Tag, input string, tokens []icumsg.Token,
+) {
+	t.Helper()
+	if p := tokenizer.Pos(); p != len(input) {
+		t.Fatalf("%v: Pos() = %d, want %d", locale, p, len(input))
+	}
+	for _, tok := range tokens {
+		_ = tok.String(input, tokens)
+	}
+	choices := checkSequence(t, input, tokens, 0, len(tokens), 0, len(input))
+
+	prefix := []icumsg.Token{{Type: icumsg.TokenTypeLiteral}}
+	appended, err := tokenizer.Tokenize(locale, prefix, input)
+	if err != nil {
+		t.Fatalf("%v: appending: %v", locale, err)
+	}
+	if !reflect.DeepEqual(tokens, appended[len(prefix):]) {
+		t.Fatalf("%v: appended tokens differ", locale)
+	}
+
+	for _, options := range [...]icumsg.SelectOptions{
+		func(string) (
+			[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+		) {
+			return nil, 0, 0
+		},
+		func(string) (
+			[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+		) {
+			return []string{"male", "female"},
+				icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject
+		},
+	} {
+		total, err := icumsg.Analyze(locale, input, tokens, options,
+			func(int) error { return nil }, func(int, int) error { return nil })
+		if err != nil || total != choices {
+			t.Fatalf("%v: Analyze = %d, %v; want %d choices", locale, total, err, choices)
+		}
+		// Errors is lazy. Range over all of it to check that it doesn't panic;
+		// which errors it reports doesn't matter here.
+		for range icumsg.Errors(locale, input, tokens, options) {
+		}
+	}
+}
+
+// checkSequence checks that tokens[from:to] cover s[start:end] without gaps
+// or overlaps, checks the options of the complex arguments among them,
+// and returns how many complex arguments there are, including nested ones.
+func checkSequence(
+	t *testing.T, s string, tokens []icumsg.Token, from, to, start, end int,
+) (choices int) {
+	t.Helper()
+	pos := start
+	for i := from; i < to; {
+		at, tok := i, tokens[i]
+		var tokEnd int
+		switch tok.Type {
+		case icumsg.TokenTypeLiteral:
+			tokEnd, i = tok.IndexEnd, i+1
+		case icumsg.TokenTypeSimpleArg:
+			tokEnd, i = tok.IndexEnd, i+1
+			if i >= to || tokens[i].Type != icumsg.TokenTypeArgName {
+				t.Fatalf("simple argument %d has no name", at)
+			}
+			// Skip the name, type and style.
+			for i < to && tokens[i].Type >= icumsg.TokenTypeArgName &&
+				tokens[i].Type <= icumsg.TokenTypeArgStyleSkeleton {
+				i++
+			}
+		case icumsg.TokenTypePlural, icumsg.TokenTypeSelect, icumsg.TokenTypeSelectOrdinal:
+			term := tok.IndexEnd
+			if term <= i || term >= to || tokens[term].IndexStart != i ||
+				tokens[term].Type != icumsg.TokenTypeComplexArgTerm {
+				t.Fatalf("complex argument %d links to %d", at, term)
+			}
+			if tokens[i+1].Type != icumsg.TokenTypeArgName {
+				t.Fatalf("complex argument %d has no name", at)
+			}
+			choices += 1 + checkOptions(t, s, tokens, i, term)
+			tokEnd, i = tokens[term].IndexEnd, term+1
+		default:
+			t.Fatalf("unexpected %s at %d", tok.Type, at)
+		}
+		if tok.IndexStart != pos {
+			t.Fatalf("%s at %d starts at byte %d, want %d", tok.Type, at, tok.IndexStart, pos)
+		}
+		pos = tokEnd
+	}
+	if pos != end {
+		t.Fatalf("tokens %d to %d end at byte %d, want %d", from, to, pos, end)
+	}
+	return choices
+}
+
+// checkOptions checks the options of the complex argument at tokens[index],
+// whose terminator is tokens[term], and returns how many complex arguments
+// their messages have.
+func checkOptions(
+	t *testing.T, s string, tokens []icumsg.Token, index, term int,
+) (choices int) {
+	t.Helper()
+	var options []int
+	j := index + 2 // Skip the argument name.
+	if tokens[j].Type == icumsg.TokenTypePluralOffset &&
+		tokens[index].Type == icumsg.TokenTypePlural {
+		j++
+	}
+	for j < term {
+		opt := tokens[j]
+		if opt.Type < icumsg.TokenTypeOption || opt.Type > icumsg.TokenTypeOptionNumber {
+			t.Fatalf("unexpected %s at %d among options", opt.Type, j)
+		}
+		options = append(options, j)
+		optTerm := opt.IndexEnd
+		if optTerm <= j || optTerm >= term || tokens[optTerm].IndexStart != j ||
+			tokens[optTerm].Type != icumsg.TokenTypeOptionTerm {
+			t.Fatalf("option %d links to %d", j, optTerm)
+		}
+		first := j + 1
+		if opt.Type == icumsg.TokenTypeOption || opt.Type == icumsg.TokenTypeOptionNumber {
+			if tokens[first].Type != icumsg.TokenTypeOptionName {
+				t.Fatalf("option %d has no name", j)
+			}
+			first++
+		}
+		// The message of the option is between its braces.
+		openBrace := opt.IndexStart + strings.IndexByte(s[opt.IndexStart:], '{')
+		closeBrace := tokens[optTerm].IndexEnd - 1
+		if s[closeBrace] != '}' {
+			t.Fatalf("option %d doesn't end with '}'", j)
+		}
+		choices += checkSequence(t, s, tokens, first, optTerm, openBrace+1, closeBrace)
+		j = optTerm + 1
+	}
+	var yielded []int
+	for o := range icumsg.Options(tokens, index) {
+		yielded = append(yielded, o)
+	}
+	if !slices.Equal(options, yielded) {
+		t.Fatalf("Options(%d) = %v, want %v", index, yielded, options)
+	}
+	return choices
 }
 
 func BenchmarkTokenize(b *testing.B) {
