@@ -45,4 +45,13 @@ func TestLookup(t *testing.T) {
 	requireEqual(t, cldr.PluralRules{
 		Cardinal: cldr.Rules{Other: true}, Ordinal: cldr.Rules{Other: true},
 	}, cldr.Lookup(language.MustParse("la")))
+
+	// Tags without a language fall back to the root locale too,
+	// not to the language likely subtags suggest, such as Ukrainian for und-UA.
+	for _, tag := range []string{"und-UA", "und-Arab", "und-US", "und-u-nu-latn"} {
+		t.Run(tag, func(t *testing.T) {
+			requireEqual(t, cldr.PluralRulesByTag[language.Und],
+				cldr.Lookup(language.MustParse(tag)))
+		})
+	}
 }

@@ -22,14 +22,8 @@ var PluralRulesByTag = make(map[language.Tag]PluralRules, 224)
 var PluralRulesByBase = make(map[language.Base]PluralRules, 224)
 
 func init() {
-	{
-		PluralRulesByTag[language.Und] = PluralRules{
-			Cardinal: Rules{Other: true}, Ordinal: Rules{Other: true},
-		}
-		undBase, _ := language.Und.Base()
-		PluralRulesByBase[undBase] = PluralRules{
-			Cardinal: Rules{Other: true}, Ordinal: Rules{Other: true},
-		}
+	PluralRulesByTag[language.Und] = PluralRules{
+		Cardinal: Rules{Other: true}, Ordinal: Rules{Other: true},
 	}
 	register := func(s string, cardinal, ordinal Rules, isBase bool) {
 		l, err := language.Parse(s)

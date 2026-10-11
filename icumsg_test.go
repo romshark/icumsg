@@ -917,6 +917,11 @@ var TestsErrorsLocale = []TestErrorLocale{
 		22, icumsg.ErrUnsupportedPluralRule,
 	},
 	{
+		// The root locale, not Ukrainian.
+		"{x,plural, other{yes} few{no}}", language.MustParse("und-UA"),
+		22, icumsg.ErrUnsupportedPluralRule,
+	},
+	{
 		"{x,plural, other{yes} few{no}}", language.AmericanEnglish,
 		22, icumsg.ErrUnsupportedPluralRule,
 	},
