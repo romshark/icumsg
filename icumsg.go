@@ -268,6 +268,9 @@ type SelectOptions func(argName string) (
 //	n := len(buffer)
 //	buffer, err = tokenizer.Tokenize(locale, buffer, s)
 //	tokens := buffer[n:] // The tokens of s.
+//
+// If s is not a valid message, Tokenize returns buffer unchanged and an error.
+// [Tokenizer.Pos] tells where the error is.
 func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
 ) ([]Token, error) {
@@ -293,18 +296,17 @@ func (t *Tokenizer) Tokenize(
 	// Tokenize into an empty slice so that the indexes linking tokens
 	// count from the first token of s.
 	tokens, err := t.consumeExpr(buffer[len(buffer):], false)
-	if len(buffer) == 0 {
-		buffer = tokens
-	} else {
-		buffer = append(buffer, tokens...)
+	if err == nil && t.pos != len(s) {
+		err = ErrUnexpectedToken
 	}
 	if err != nil {
+		// Drop the tokens, which don't all link to each other yet.
 		return buffer, err
 	}
-	if t.pos != len(s) {
-		return buffer, ErrUnexpectedToken
+	if len(buffer) == 0 {
+		return tokens, nil
 	}
-	return buffer, nil
+	return append(buffer, tokens...), nil
 }
 
 // consumeExpr consumes a message or sub-message.

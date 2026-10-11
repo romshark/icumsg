@@ -1271,11 +1271,28 @@ func TestTokenizeErr(t *testing.T) {
 		test.RequireNoErr(t, err)
 		t.Run("", func(t *testing.T) {
 			buffer = buffer[:0]
-			_, err := tokenizer.Tokenize(l, buffer, tt.Input)
+			tokens, err := tokenizer.Tokenize(l, buffer, tt.Input)
 			t.Logf("input: %q", tt.Input)
 			test.RequireErrIs(t, tt.ExpectErr, err)
 			test.RequireEqual(t, tt.ExpectErrIndex, tokenizer.Pos())
+			test.RequireEqual(t, 0, len(tokens))
 		})
+	}
+}
+
+func TestTokenizeErrKeepsBuffer(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	prefix, err := tokenizer.Tokenize(language.English, nil, "{a} {b, number}")
+	test.RequireNoErr(t, err)
+
+	// With and without room to append in place.
+	for _, capacity := range []int{len(prefix), 64} {
+		buffer := append(make([]icumsg.Token, 0, capacity), prefix...)
+		buffer, err = tokenizer.Tokenize(language.English, buffer,
+			"{a, select, other{{n, plural, other{x}")
+		test.RequireErrIs(t, icumsg.ErrUnexpectedEOF, err)
+		test.RequireDeepEqual(t, prefix, buffer)
+		test.RequireEqual(t, capacity, cap(buffer))
 	}
 }
 
@@ -2097,6 +2114,9 @@ func Fuzz(f *testing.F) {
 			if err != nil {
 				if p := tokenizer.Pos(); p < 0 || p > len(input) {
 					t.Fatalf("%v: Pos() = %d after error %v", locale, p, err)
+				}
+				if len(buffer) != 0 {
+					t.Fatalf("%v: %d tokens after error %v", locale, len(buffer), err)
 				}
 				continue
 			}
