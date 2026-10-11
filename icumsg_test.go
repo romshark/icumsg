@@ -29,7 +29,7 @@ type Token struct {
 	Type icumsg.TokenType
 }
 
-// ToTestTokens creates a slice of simplified tokens with their string values.
+// ToTestTokens returns simplified tokens with their text.
 func ToTestTokens(input string, buffer, toks []icumsg.Token) []Token {
 	if len(toks) == 0 {
 		return nil
@@ -145,7 +145,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "a'}'b", Type: icumsg.TokenTypeLiteral},
 	}...)
 
-	// An apostrophe not immediately preceding a syntax character is literal text.
+	// Apostrophes before non-syntax characters are literal.
 	f(t, language.English, "This isn't obvious", []Token{
 		{Str: "This isn't obvious", Type: icumsg.TokenTypeLiteral},
 	}...)
@@ -158,25 +158,24 @@ func TestTokenize(t *testing.T) {
 	f(t, language.English, "aujourd'hui", []Token{
 		{Str: "aujourd'hui", Type: icumsg.TokenTypeLiteral},
 	}...)
-	// A doubled apostrophe escapes one literal apostrophe.
+	// Doubled apostrophes escape one apostrophe.
 	f(t, language.English, "He''s here {n}", []Token{
 		{Str: "He''s here ", Type: icumsg.TokenTypeLiteral},
 		{Str: "{n}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
 	}...)
-	// Ordinary and quoting apostrophes in the same message.
+	// Literal and quoting apostrophes can coexist.
 	f(t, language.English, "it's not '{arg}'", []Token{
 		{Str: "it's not '{arg}'", Type: icumsg.TokenTypeLiteral},
 	}...)
-	// A trailing apostrophe never opens a quote.
+	// A trailing apostrophe is literal.
 	f(t, language.English, "{n} isn't", []Token{
 		{Str: "{n}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
 		{Str: " isn't", Type: icumsg.TokenTypeLiteral},
 	}...)
 
-	// '#' is a syntax character in plural and selectordinal options.
-	// An apostrophe preceding it starts quoted text.
+	// Apostrophes quote '#' in plural and selectordinal options.
 	f(t, language.English, "{n,plural,other{'#{x}' }}", []Token{
 		{Str: "{n,plural,other{'#{x}' }}", Type: icumsg.TokenTypePlural},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
@@ -193,8 +192,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
 		{Str: "{n,selectordinal,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
 	}...)
-	// The same sub-message in a select where '#' is not a syntax character.
-	// The apostrophes stay literal and {x} remains an argument.
+	// In selects, '#' and its apostrophes are literal; {x} remains an argument.
 	f(t, language.English, "{g,select,other{'#{x}' }}", []Token{
 		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeSelect},
 		{Str: "g", Type: icumsg.TokenTypeArgName},
@@ -206,8 +204,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "other{'#{x}' }", Type: icumsg.TokenTypeOptionTerm},
 		{Str: "{g,select,other{'#{x}' }}", Type: icumsg.TokenTypeComplexArgTerm},
 	}...)
-	// Only the immediately enclosing argument decides.
-	// '#' is not quotable in a select nested inside a plural.
+	// Only the immediate parent matters: a nested select cannot quote '#'.
 	f(t, language.English, "{n,plural,other{{g,select,other{'#{x}' }}}}", []Token{
 		{Str: "{n,plural,other{{g,select,other{'#{x}' }}}}", Type: icumsg.TokenTypePlural},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
@@ -404,8 +401,7 @@ func TestTokenize(t *testing.T) {
 		{Str: " after", Type: icumsg.TokenTypeLiteral},
 	}...)
 
-	// Custom styles are string patterns that end at the first '}'
-	// that's neither quoted nor closing a '{' within the style.
+	// Custom styles end at the first unquoted, unmatched '}'.
 	f(t, language.English, "{n, number, #,##0.00}", []Token{
 		{Str: "{n, number, #,##0.00}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
@@ -431,7 +427,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "spellout", Type: icumsg.TokenTypeArgTypeSpellout},
 		{Str: "%spellout-ordinal", Type: icumsg.TokenTypeArgStyleCustom},
 	}...)
-	// Every apostrophe in a style starts or ends quoted text.
+	// Every style apostrophe toggles quoting.
 	f(t, language.English, "{t, time, h 'o''clock' a}", []Token{
 		{Str: "{t, time, h 'o''clock' a}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "t", Type: icumsg.TokenTypeArgName},
@@ -450,7 +446,7 @@ func TestTokenize(t *testing.T) {
 		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
 		{Str: "{#}", Type: icumsg.TokenTypeArgStyleCustom},
 	}...)
-	// A keyword is only recognized as the whole style.
+	// Recognize keywords only as the whole style.
 	f(t, language.English, "{n, number, integer, foobar}", []Token{
 		{Str: "{n, number, integer, foobar}", Type: icumsg.TokenTypeSimpleArg},
 		{Str: "n", Type: icumsg.TokenTypeArgName},
@@ -676,7 +672,7 @@ func TestTokenize(t *testing.T) {
 		},
 	}...)
 
-	// Whitespace at the start of an option is message text.
+	// Leading option whitespace is message text.
 	f(t, language.English, "{g,select,male{ he} other{  they}}", []Token{
 		{Str: "{g,select,male{ he} other{  they}}", Type: icumsg.TokenTypeSelect},
 		{Str: "g", Type: icumsg.TokenTypeArgName},
@@ -716,7 +712,6 @@ func TestTokenize(t *testing.T) {
 	}
 
 	{ // Nested choices.
-		// Nested choices.
 		// Male
 		maleEq0 := `=0 {У нього немає повідомлень.}`
 		maleOne := `one {У нього одне повідомлення.}`
@@ -814,7 +809,7 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
-	// Nested arguments may reuse the option names of the enclosing argument.
+	// Nested arguments may reuse outer option names.
 	f(t, language.English, "{a,select,x{{b,select,x{ok} other{ok}}} other{ok}}",
 		[]Token{
 			{Str: "{a,select,x{{b,select,x{ok} other{ok}}} other{ok}}", Type: icumsg.TokenTypeSelect},
@@ -877,14 +872,13 @@ func TestTokenizeAppend(t *testing.T) {
 		return nil, 0, 0
 	}
 
-	// Append in place and with buffer growing.
+	// Append both in place and with growth.
 	for _, capacity := range []int{64, len(expectFirst)} {
 		buffer := append(make([]icumsg.Token, 0, capacity), expectFirst...)
 		buffer, err = tokenizer.Tokenize(language.English, buffer, second)
 		test.RequireNoErr(t, err)
 
-		// The tokens of each message link to each other by their index
-		// among the tokens of that message.
+		// Links use indexes within each message's tokens.
 		n := len(expectFirst)
 		test.RequireDeepEqual(t, expectFirst, buffer[:n])
 		test.RequireDeepEqual(t, expectSecond, buffer[n:])
@@ -901,7 +895,7 @@ func TestTokenizeAppend(t *testing.T) {
 		test.RequireEqual(t, 2, total)
 		test.RequireDeepEqual(t, []string{"{n, plural, other{x}}"}, incomplete)
 
-		// Given the tokens of more than one message, Analyze still returns.
+		// Analyze terminates even with tokens from several messages.
 		buffer, err = tokenizer.Tokenize(language.English, buffer, first)
 		test.RequireNoErr(t, err)
 		_, _ = icumsg.Analyze(language.English, second, buffer, noOptions,
@@ -941,7 +935,7 @@ func TestTokenizePatternWhiteSpace(t *testing.T) {
 		{Str: "short", Type: icumsg.TokenTypeArgStyleShort},
 	}
 
-	// Like ICU, skip any Pattern_White_Space between syntax elements.
+	// Skip ICU Pattern_White_Space between syntax elements.
 	for _, ws := range []rune{
 		'\t', '\n', '\v', '\f', '\r', ' ',
 		'\u0085', '\u200e', '\u200f', '\u2028', '\u2029',
@@ -1017,7 +1011,7 @@ var TestsErrorsLocale = []TestErrorLocale{
 		"{x,selectordinal, other{yes} zero{no}}", language.Ukrainian,
 		29, icumsg.ErrUnsupportedPluralRule,
 	},
-	// Without CLDR plural data, a locale has only "other".
+	// Locales without CLDR data use only "other".
 	{
 		"{x,plural, other{yes} one{no}}", language.MustParse("la"),
 		22, icumsg.ErrUnsupportedPluralRule,
@@ -1072,7 +1066,7 @@ func TestPluralRulesOfAllLocales(t *testing.T) {
 			arg   string
 			rules cldr.PluralRules
 		}{{"plural", cardinal}, {"selectordinal", ordinal}} {
-			// A choice with exactly the categories of the locale is complete.
+			// The locale's exact categories are complete.
 			msg := "{n, " + kind.arg + ","
 			for _, c := range categories {
 				if c.in(kind.rules) {
@@ -1088,7 +1082,7 @@ func TestPluralRulesOfAllLocales(t *testing.T) {
 			test.RequireNoErr(t, err)
 			test.RequireEqual(t, 1, total, "%v: %s", tag, msg)
 
-			// Any other category is unsupported.
+			// Other categories are unsupported.
 			for _, c := range categories {
 				if c.in(kind.rules) {
 					continue
@@ -1173,7 +1167,7 @@ var TestsErrors = []TestError{
 	// ICU allows no comma after the offset.
 	{"{x,plural,offset:3,other{o}}", 18, icumsg.ErrInvalidOption},
 	// Unclosed quote.
-	// Every apostrophe below immediately precedes a syntax character.
+	// Each apostrophe below precedes syntax.
 	{"prefix '{unclosed quote", 7, icumsg.ErrUnclosedQuote},
 	{"prefix '}unclosed quote", 7, icumsg.ErrUnclosedQuote},
 	{"prefix '' '{unclosed quote", 10, icumsg.ErrUnclosedQuote},
@@ -1184,10 +1178,9 @@ var TestsErrors = []TestError{
 	// '#' is a syntax character in a plural option.
 	{"{x,plural, other {'# }}", 18, icumsg.ErrUnclosedQuote},
 	{"{x,selectordinal, other {'# }}", 25, icumsg.ErrUnclosedQuote},
-	// The trailing apostrophe precedes '}' and opens a quote that swallows
-	// the closing brackets.
+	// The last apostrophe quotes the closing brackets.
 	{"{g,select,other{'#{x}'}}", 21, icumsg.ErrUnclosedQuote},
-	// Every apostrophe in an argument style starts or ends quoted text.
+	// Style apostrophes always toggle quoting.
 	{"{x, number, '#}", 12, icumsg.ErrUnclosedQuote},
 	// Unexpected token.
 	{"}", 0, icumsg.ErrUnexpectedToken},
@@ -1257,7 +1250,7 @@ var TestsErrors = []TestError{
 	{"{n, plural, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =1{c} =0{d}}", 33, icumsg.ErrDuplicateOption},
-	// Explicit values written differently are duplicates if they're equal.
+	// Equal explicit values are duplicates regardless of spelling.
 	{"{n, plural, other{a} =1{b} =1.0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =-0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =1000{b} =1e3{c}}", 30, icumsg.ErrDuplicateOption},
@@ -1281,7 +1274,7 @@ var TestsErrors = []TestError{
 	{"{n, select, other{a} two{b} two{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} few{b} few{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
-	// Duplicate option next to a nested argument reusing the option name.
+	// Duplicate beside a nested reuse of the name.
 	{"{a,select,x{{b,select,x{ok} x{ok} other{ok}}} other{ok}}", 28,
 		icumsg.ErrDuplicateOption},
 	{"{a,select,x{{b,select,x{ok} other{ok}}} x{ok} other{ok}}", 40,
@@ -1290,11 +1283,10 @@ var TestsErrors = []TestError{
 		icumsg.ErrDuplicateOption},
 	{"{a,plural,=0{{b,plural,=0{ok} other{ok}}} =0{ok} other{ok}}", 42,
 		icumsg.ErrDuplicateOption},
-	// The first option that repeats an earlier name is the duplicate.
+	// Report the first repeated name.
 	{"{n, select, a{1} b{1} b{1} a{1} other{1}}", 22, icumsg.ErrDuplicateOption},
 	{"{n, plural, =0{1} one{1} one{1} =0{1} other{1}}", 25, icumsg.ErrDuplicateOption},
-	// Duplicate option after more than 8 select or =n options,
-	// repeating one of the first 8 names or a later one.
+	// Find duplicates before and after the eight-name map threshold.
 	{"{n, select, a{1} b{1} c{1} d{1} e{1} f{1} g{1} h{1} i{1} a{1} other{1}}", 57,
 		icumsg.ErrDuplicateOption},
 	{"{n, select, a{1} b{1} c{1} d{1} e{1} f{1} g{1} h{1} i{1} j{1} j{1} other{1}}", 62,
@@ -1366,9 +1358,9 @@ func TestTokenizeNestingLimit(t *testing.T) {
 			return strings.Repeat(open, levels) + "x" + strings.Repeat("}}", levels)
 		}
 
-		const maxLevel = 1023
+		const maxLevel = icumsg.MaxNestingLevel
 
-		// At the limit, Tokenize, Analyze and Errors succeed.
+		// The limit succeeds in all APIs.
 		msg := nest(maxLevel)
 		tokens, err := tokenizer.Tokenize(language.English, nil, msg)
 		test.RequireNoErr(t, err, "%s", open)
@@ -1379,7 +1371,7 @@ func TestTokenizeNestingLimit(t *testing.T) {
 		for range icumsg.Errors(language.English, msg, tokens, noOptions) {
 		}
 
-		// One level deeper fails at the opening bracket of the option.
+		// The next level fails at its opening brace.
 		_, err = tokenizer.Tokenize(language.English, nil, nest(maxLevel+1))
 		test.RequireErrIs(t, icumsg.ErrNestingTooDeep, err, "%s", open)
 		test.RequireEqual(t, (maxLevel+1)*len(open)-1, tokenizer.Pos(), "%s", open)
@@ -1465,7 +1457,7 @@ func TestOptions(t *testing.T) {
 	}
 
 	{
-		// Options nested in an =n option belong to the nested argument.
+		// Options under =n belong to the nested argument.
 		nested := "Prefix {x,plural,=0{{g,select,male{m} other{o}}} one{a} other{b}}"
 		fn(t, nested, 1, // plural
 			Token{Str: "=0{{g,select,male{m} other{o}}}", Type: icumsg.TokenTypeOptionNumber},
@@ -1588,7 +1580,7 @@ func TestAnalyze(t *testing.T) {
 		"{_0, selectordinal, other{#a} zero{#b} one{#c} two{#d} few{#e} many{#f}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
-	// Without CLDR plural data, a locale only needs "other".
+	// Locales without CLDR data need only "other".
 	fn(t, language.MustParse("la"), "{_0, plural, other{# a}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
@@ -1625,7 +1617,7 @@ func TestAnalyze(t *testing.T) {
 		icumsg.OptionsPresencePolicyOptional, icumsg.OptionUnknownPolicyIgnore,
 		1, nil, nil)
 
-	// Optional options don't keep unknown ones from being rejected.
+	// Optional presence does not permit unknown options.
 	fn(t, language.English,
 		"no bar and unknown baz: {_0, select, foo{foo} baz{baz} other{other}}",
 		map[string][]string{"_0": {"foo", "bar"}},
@@ -1666,18 +1658,18 @@ func TestAnalyze(t *testing.T) {
 		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
 		1, []string{"{_0, select, d{d} b{b} c{c} other{o}}"}, []string{"d{d}", "c{c}"})
 
-	// An empty non-nil slice of options allows only other.
+	// An empty non-nil slice permits only other.
 	fn(t, language.English, "unknown male: {_0, select, male{x} other{y}}",
 		map[string][]string{"_0": {}},
 		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
 		1, nil, []string{"male{x}"})
 
-	// A nil slice of options applies no policies.
+	// A nil slice disables policies.
 	fn(t, language.English, "{_0, select, male{x} other{y}}",
 		nil, icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
 		1, nil, nil)
 
-	// Listing "other", which every select has, or listing a name twice is harmless.
+	// Listing "other" or a duplicate is harmless.
 	fn(t, language.English, "{_0, select, a{a} b{b} other{o}}",
 		map[string][]string{"_0": {"a", "b", "other"}},
 		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyReject,
@@ -1727,7 +1719,7 @@ func TestAnalyze(t *testing.T) {
 		icumsg.OptionsPresencePolicyRequired, icumsg.OptionUnknownPolicyIgnore,
 		4, []string{"{_1, select, a{a} other{o}}"}, nil)
 
-	// Options of a plural nested in an =n option don't count toward the outer plural.
+	// Nested =n options do not satisfy the outer plural.
 	fn(t, language.English,
 		"missing one: {_0, plural, =0{{_1, plural, one{a} other{b}}} other{c}}",
 		nil, 0, 0, 2,
@@ -1782,8 +1774,7 @@ func TestAnalyzeCallbackErrors(t *testing.T) {
 	}
 	errStop := errors.New("stop")
 
-	// Unless Analyze returns the first error immediately,
-	// each input makes the callbacks run more than once.
+	// Each input calls back twice unless Analyze stops at the first error.
 	for _, input := range [...]string{
 		// Rejected option.
 		"{s, select, x{-} other{-}} {t, select, y{-} other{-}}",
@@ -1897,7 +1888,7 @@ func TestCompletenessErrors(t *testing.T) {
 		"{var0, selectordinal, zero{0} one{1} two{2} few{3} many{4} other{5}}",
 		optionsNone, checkNoErrs)
 
-	// Without CLDR plural data, a locale only needs "other".
+	// Locales without CLDR data need only "other".
 	fn(t, language.MustParse("la"),
 		"{var0, plural, other{0}} {var1, selectordinal, other{1}}",
 		optionsNone, checkNoErrs)
@@ -1971,7 +1962,7 @@ func TestCompletenessErrors(t *testing.T) {
 				errs[0].Error())
 		})
 
-	// Listing "other", which every select has, or listing a name twice is harmless.
+	// Listing "other" or a duplicate is harmless.
 	fn(t, language.English,
 		"{var0, select, female{1} male{2} other{3}}",
 		optionsRequired("male", "female", "other"), checkNoErrs)
@@ -2060,7 +2051,7 @@ func TestCompletenessErrors(t *testing.T) {
 				errs[0].Error())
 		})
 
-	// The nested "one" doesn't count toward the outer plural.
+	// Nested "one" does not satisfy the outer plural.
 	fn(t, language.English,
 		"{var0, plural, =0{{var1, plural, one{-} other{-}}} other{-}}",
 		optionsNone, checkMissingPlural("cardinal", "one"))
@@ -2190,8 +2181,7 @@ func Fuzz(f *testing.F) {
 	f.Add(ReadFile[string](f, "testdata/lorem_ipsum_args.icu.txt"))
 	f.Add(ReadFile[string](f, "testdata/nested.icu.txt"))
 
-	// Locales with few plural categories, with all of them,
-	// and without CLDR plural data.
+	// Cover few, all, and no CLDR plural categories.
 	locales := []language.Tag{
 		language.English, language.Japanese, language.Ukrainian,
 		language.Arabic, language.MustParse("cy"), language.MustParse("la"),
@@ -2218,7 +2208,7 @@ func Fuzz(f *testing.F) {
 	})
 }
 
-// checkTokens checks the tokens of input, which tokenizer tokenized successfully.
+// checkTokens validates a successful tokenization.
 func checkTokens(
 	t *testing.T, tokenizer *icumsg.Tokenizer,
 	locale language.Tag, input string, tokens []icumsg.Token,
@@ -2259,16 +2249,14 @@ func checkTokens(
 		if err != nil || total != choices {
 			t.Fatalf("%v: Analyze = %d, %v; want %d choices", locale, total, err, choices)
 		}
-		// Errors is lazy. Range over all of it to check that it doesn't panic;
-		// which errors it reports doesn't matter here.
+		// Exhaust the lazy sequence to catch panics.
 		for range icumsg.Errors(locale, input, tokens, options) {
 		}
 	}
 }
 
-// checkSequence checks that tokens[from:to] cover s[start:end] without gaps
-// or overlaps, checks the options of the complex arguments among them,
-// and returns how many complex arguments there are, including nested ones.
+// checkSequence validates contiguous coverage and complex options, returning
+// the number of complex arguments including nested ones.
 func checkSequence(
 	t *testing.T, s string, tokens []icumsg.Token, from, to, start, end int,
 ) (choices int) {
@@ -2315,9 +2303,8 @@ func checkSequence(
 	return choices
 }
 
-// checkOptions checks the options of the complex argument at tokens[index],
-// whose terminator is tokens[term], and returns how many complex arguments
-// their messages have.
+// checkOptions validates an argument's options and returns their count of
+// nested complex arguments.
 func checkOptions(
 	t *testing.T, s string, tokens []icumsg.Token, index, term int,
 ) (choices int) {
@@ -2346,7 +2333,7 @@ func checkOptions(
 			}
 			first++
 		}
-		// The message of the option is between its braces.
+		// Validate the message between the option's braces.
 		openBrace := opt.IndexStart + strings.IndexByte(s[opt.IndexStart:], '{')
 		closeBrace := tokens[optTerm].IndexEnd - 1
 		if s[closeBrace] != '}' {
@@ -2369,7 +2356,7 @@ func BenchmarkTokenize(b *testing.B) {
 	var tokenizer icumsg.Tokenizer
 	buffer := make([]icumsg.Token, 0, 64)
 
-	// A select with 1000 options besides other.
+	// A select with 1,000 options plus other.
 	var manyOptions strings.Builder
 	manyOptions.Grow(len("{n, select,") + 1000*len(" o999{x}") + len(" other{x}}"))
 	manyOptions.WriteString("{n, select,")

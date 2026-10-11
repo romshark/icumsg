@@ -44,13 +44,13 @@ func TestLocalePluralRules(t *testing.T) {
 	)
 	f(t, language.Portuguese,
 		cldr.PluralRules{One: true, Many: true, Other: true},
-		// Expect other even though CLDR doesn't define ordinal for Portuguese.
+		// Portuguese has no ordinal rules beyond other.
 		cldr.PluralRules{Other: true})
 	f(t, language.French,
 		cldr.PluralRules{One: true, Many: true, Other: true},
 		cldr.PluralRules{One: true, Other: true},
 	)
-	// Haitian French falls back to "fr".
+	// Haitian French falls back to French.
 	f(t, language.MustParse("fr-HT"),
 		cldr.PluralRules{One: true, Many: true, Other: true},
 		cldr.PluralRules{One: true, Other: true},
@@ -69,12 +69,12 @@ func TestLocalePluralRules(t *testing.T) {
 		cldr.PluralRules{Other: true},
 		cldr.PluralRules{Other: true},
 	)
-	// Chinese simplified script (China) falls back to "zh".
+	// Simplified Chinese (China) falls back to Chinese.
 	f(t, language.MustParse("zh-Hans-CN"),
 		cldr.PluralRules{Other: true},
 		cldr.PluralRules{Other: true},
 	)
-	// Latin has no CLDR plural data and falls back to the root locale.
+	// Latin has no CLDR data and falls back to root.
 	f(t, language.MustParse("la"),
 		cldr.PluralRules{Other: true},
 		cldr.PluralRules{Other: true},

@@ -37,17 +37,16 @@ func TestLookup(t *testing.T) {
 		cldr.PluralRulesByTag[language.English],
 		cldr.Lookup(language.English))
 
-	// Haitian French falls back to "fr".
+	// Haitian French falls back to French.
 	requireEqual(t, cldr.PluralRulesByTag[language.French],
 		cldr.Lookup(language.MustParse("fr-HT")))
 
-	// Latin has no CLDR plural data and falls back to the root locale.
+	// Latin has no CLDR data and falls back to root.
 	requireEqual(t, cldr.PluralRules{
 		Cardinal: cldr.Rules{Other: true}, Ordinal: cldr.Rules{Other: true},
 	}, cldr.Lookup(language.MustParse("la")))
 
-	// Tags without a language fall back to the root locale too,
-	// not to the language likely subtags suggest, such as Ukrainian for und-UA.
+	// Language-less tags use root, not a likely-subtag language such as Ukrainian.
 	for _, tag := range []string{"und-UA", "und-Arab", "und-US", "und-u-nu-latn"} {
 		t.Run(tag, func(t *testing.T) {
 			requireEqual(t, cldr.PluralRulesByTag[language.Und],

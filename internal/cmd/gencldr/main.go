@@ -67,9 +67,7 @@ func main() {
 	}
 }
 
-// generate writes the Go source for the embedded plural rules to the file at path.
-// The file is replaced only once the source has been generated and formatted,
-// so a failure leaves it as it was.
+// generate atomically writes formatted Go source for the embedded plural rules.
 func generate(path, pkgName string) error {
 	var ordinals ModelOrdinal
 	if err := json.Unmarshal(ordinalsJSON, &ordinals); err != nil {
@@ -90,8 +88,7 @@ func generate(path, pkgName string) error {
 		return err
 	}
 
-	// Rename a fully written temporary file over path
-	// so that path is never left partially written.
+	// Keep path intact until the temporary file is complete.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, formatted, 0o644); err != nil {
 		_ = os.Remove(tmp)

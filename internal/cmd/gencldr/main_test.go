@@ -28,7 +28,7 @@ func TestGenerateErrKeepsFile(t *testing.T) {
 	const existing = "package cldr\n"
 	test.RequireNoErr(t, os.WriteFile(path, []byte(existing), 0o644))
 
-	// The invalid package name makes formatting fail.
+	// An invalid package name makes formatting fail.
 	if err := generate(path, "invalid-name"); err == nil {
 		t.Fatal("expected error")
 	}
@@ -45,7 +45,7 @@ func TestGenerateErrKeepsFile(t *testing.T) {
 func TestGenerateErrRename(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cldr_gen.go")
-	// Renaming the temporary file fails because a directory is in the way.
+	// A directory blocks the final rename.
 	test.RequireNoErr(t, os.Mkdir(path, 0o755))
 	test.RequireNoErr(t, os.WriteFile(filepath.Join(path, "file"), nil, 0o644))
 
@@ -64,7 +64,7 @@ func TestGenerateErrRename(t *testing.T) {
 
 func TestGenerateErrWrite(t *testing.T) {
 	dir := t.TempDir()
-	// Writing the temporary file fails because its directory is missing.
+	// A missing directory prevents the temporary write.
 	path := filepath.Join(dir, "missing", "cldr_gen.go")
 
 	if err := generate(path, "cldr"); err == nil {

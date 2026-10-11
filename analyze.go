@@ -10,14 +10,18 @@ import (
 	"golang.org/x/text/language"
 )
 
+// ErrorPluralMissingOption reports missing locale plural categories.
+// Need lists the locale's categories, Has the argument's, and TokenIndex the
+// argument's token index. Ordinal distinguishes selectordinal from plural.
 type ErrorPluralMissingOption struct {
 	Need, Has  cldr.PluralRules
 	TokenIndex int
 
-	// When Ordinal == false the plural options are cardinal.
+	// False means cardinal.
 	Ordinal bool
 }
 
+// MissingOptions yields the required categories absent from the argument.
 func (e ErrorPluralMissingOption) MissingOptions() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		if e.Need.Zero && !e.Has.Zero {
@@ -45,8 +49,7 @@ func (e ErrorPluralMissingOption) MissingOptions() iter.Seq[string] {
 				return
 			}
 		}
-		// Other is always needed.
-		// An ICU message will fail to parse if other is missing.
+		// Tokenize already requires other.
 	}
 }
 
@@ -67,15 +70,19 @@ func (e ErrorPluralMissingOption) Error() string {
 	return b.String()
 }
 
+// ErrorSelectMissingOption reports options required by [SelectOptions] but
+// absent from a select. Need lists required options, Has present options,
+// and TokenIndex the argument's token index.
 type ErrorSelectMissingOption struct {
 	Need, Has  []string
 	TokenIndex int
 }
 
+// MissingOptions yields each absent required option once.
 func (e ErrorSelectMissingOption) MissingOptions() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for i, n := range e.Need {
-			// Need may list an option more than once.
+			// Ignore duplicates in Need.
 			if slices.Index(e.Has, n) == -1 && slices.Index(e.Need[:i], n) == -1 {
 				if !yield(n) {
 					break
@@ -98,6 +105,8 @@ func (e ErrorSelectMissingOption) Error() string {
 	return b.String()
 }
 
+// ErrorSelectInvalidOption reports an unlisted option rejected by [SelectOptions].
+// Its fields are token indexes.
 type ErrorSelectInvalidOption struct {
 	TokenIndexArgument int
 	TokenIndexOption   int
@@ -109,19 +118,17 @@ func (e ErrorSelectInvalidOption) Error() string {
 
 var errStopAnalyze = errors.New("stop")
 
-// Errors returns an iterator over all semantic (non-syntax) errors
-// for the given ICU message.
+// Errors yields the message's semantic errors: [ErrorPluralMissingOption],
+// [ErrorSelectMissingOption], and [ErrorSelectInvalidOption].
 func Errors(
 	locale language.Tag, raw string, tokens []Token, selectOptions SelectOptions,
 ) iter.Seq[error] {
 	return func(yield func(error) bool) {
-		// No need to check the returned error because it can only ever
-		// return errStopAnalyze and nothing else.
+		// Analyze can return only errStopAnalyze here.
 		_, _ = Analyze(
 			locale, raw, tokens,
 			selectOptions,
 			func(index int) error {
-				// On incomplete.
 				tok := tokens[index]
 				argNameTok := tokens[index+1]
 				argName := argNameTok.String(raw, tokens)
@@ -195,8 +202,7 @@ func findAllSelectOptions(msg string, tokens []Token, index int) (has []string) 
 	return has
 }
 
-// hasSelectOptions reports whether the select at tokens[index] has an option
-// for each of names, comparing names like ErrorSelectMissingOption does.
+// hasSelectOptions reports whether the select contains every name.
 func hasSelectOptions(msg string, tokens []Token, index int, names []string) bool {
 NAMES:
 	for _, n := range names {
@@ -218,25 +224,17 @@ func selectOptionName(msg string, tokens []Token, index int) string {
 	return tokens[index+1].String(msg, tokens)
 }
 
-// Analyze returns the total number of choices in src.
-// onIncomplete is invoked when an incomplete select, plural or selectordinal
-// is encountered.
-// onRejected is invoked when an unknown select option was encountered.
-// selectOptions is invoked when a select is encountered and if it returns
-// a non-nil slice then those will be the expected options the presence of which
-// will define whether the select is complete (depending on the policies returned).
-// An empty non-nil slice expects no options besides "other".
-// A nil slice applies no policies.
-// selectOptions is not invoked for plural and selectordinal, instead locale is used
-// to determine what options are required.
-// If onIncomplete or onRejected returns an error it's returned immediately.
+// Analyze returns the number of select, plural, and selectordinal arguments in src,
+// whose tokens are in buffer. locale defines plural requirements and selectOptions
+// defines select policies. onIncomplete receives each incomplete argument index;
+// onRejected receives the select and rejected option indexes.
+// Callback errors stop analysis.
+// selectOptions, onIncomplete and onRejected must not be nil.
 func Analyze(
 	locale language.Tag,
 	src string,
 	buffer []Token,
-	selectOptions func(argName string) (
-		[]string, OptionsPresencePolicy, OptionUnknownPolicy,
-	),
+	selectOptions SelectOptions,
 	onIncomplete func(index int) error,
 	onRejected func(indexArgument, indexOption int) error,
 ) (totalChoices int, err error) {
@@ -255,8 +253,7 @@ func analyze(
 ) (total int, err error) {
 	cardinal, ordinal := cldr.LocalePluralRules(locale)
 
-	// Skipping contents never goes back, so that the tokens of more than
-	// one message (see Tokenize) can't make this loop forever.
+	// Never skip backward across separately tokenized messages.
 	for i := startIndex; i < endIndex; i++ {
 		t := buffer[i]
 		switch t.Type {
@@ -265,7 +262,7 @@ func analyze(
 			tn := buffer[i+1]
 			opts, presencePolicy, unknownPolicy := selectOptions(tn.String(src, buffer))
 			for j := range Options(buffer, i) {
-				// A nil opts applies no policies.
+				// Nil opts disable policies.
 				if opts != nil && unknownPolicy == OptionUnknownPolicyReject &&
 					buffer[j].Type != TokenTypeOptionOther &&
 					!slices.Contains(opts, buffer[j+1].String(src, buffer)) {

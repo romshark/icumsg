@@ -1,3 +1,6 @@
+// Package cldr reports a locale's [CLDR] plural categories.
+//
+// [CLDR]: https://cldr.unicode.org/
 package cldr
 
 import (
@@ -5,6 +8,7 @@ import (
 	"golang.org/x/text/language"
 )
 
+// CLDR plural category names.
 const (
 	RuleZero  = "zero"
 	RuleOne   = "one"
@@ -14,14 +18,13 @@ const (
 	RuleOther = "other"
 )
 
+// PluralRules marks the plural categories a locale uses.
 type PluralRules struct{ Zero, One, Two, Few, Many, Other bool }
 
-// LocalePluralRules returns cardinal and ordinal plural rules for locale.
-// If CLDR has no plural rules for locale, it falls back to those of the
-// language of locale, if locale specifies one, and then to those of the root
-// locale [language.Und], which has only "other". A tag without a language,
-// such as und-UA, uses the root rules. To find the [parent locale] of a tag,
-// CLDR removes subtags from the end. It does not add a language.
+// LocalePluralRules returns locale's cardinal and ordinal rules. Missing rules
+// fall back to its explicit language, then to [language.Und], which has only "other".
+// Tags without a language use the root. CLDR finds a [parent locale]
+// by removing trailing subtags; it does not infer a language.
 //
 // [parent locale]: https://www.unicode.org/reports/tr35/#Parent_Locales
 func LocalePluralRules(locale language.Tag) (cardinal, ordinal PluralRules) {

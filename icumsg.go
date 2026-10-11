@@ -1,6 +1,8 @@
-// Package icumsg provides a tokenizer for ICU MessageFormat 1.0 (ICU 4.8 and later).
-// Its successor MessageFormat 2.0 (UTS #35 Part 9) is not supported.
-// See https://unicode-org.github.io/icu/userguide/format_parse/messages/
+// Package icumsg tokenizes [ICU MessageFormat] 1.0 (ICU 4.8 and later),
+// but not MessageFormat 2.0 ([UTS #35 Part 9]).
+//
+// [ICU MessageFormat]: https://unicode-org.github.io/icu/userguide/format_parse/messages/
+// [UTS #35 Part 9]: https://unicode.org/reports/tr35/tr35-messageFormat.html
 package icumsg
 
 import (
@@ -17,20 +19,23 @@ import (
 	"golang.org/x/text/language"
 )
 
+// TokenType identifies a [Token].
 type TokenType uint8
 
+// These groups define the meaning of [Token.IndexStart] and [Token.IndexEnd].
 const (
 	_ TokenType = iota
 
-	// Literal. [Token.IndexStart] and [Token.IndexEnd] are
-	// byte offsets in the input string.
+	// Literal, up to [TokenTypeOptionName]. [Token.IndexStart] and
+	// [Token.IndexEnd] are byte offsets in the input string.
 
 	TokenTypeLiteral      // Any literal
 	TokenTypeSimpleArg    // { arg }
 	TokenTypePluralOffset // offset:1
 	TokenTypeArgName      // The name of any argument
 
-	// The following token types always follow [TokenTypeArgName].
+	// These types follow [TokenTypeArgName].
+
 	TokenTypeArgTypeNumber   // "You have {count, number} new messages."
 	TokenTypeArgTypeDate     // "Your appointment is on {appointmentDate, date}."
 	TokenTypeArgTypeTime     // "The train departs at {departureTime, time}."
@@ -38,7 +43,7 @@ const (
 	TokenTypeArgTypeOrdinal  // "You came in {place, ordinal} place!"
 	TokenTypeArgTypeDuration // "Estimated time: {seconds, duration}."
 
-	// The following token types always follow any argument type.
+	// These styles follow an argument type.
 
 	TokenTypeArgStyleShort
 	TokenTypeArgStyleMedium
@@ -50,16 +55,18 @@ const (
 	TokenTypeArgStyleCustom
 	TokenTypeArgStyleSkeleton
 
-	// TokenTypeOptionName is the option name. Always follows [TokenTypeOption].
+	// TokenTypeOptionName follows [TokenTypeOption] or [TokenTypeOptionNumber].
+	// Number-option names include the '='.
+
 	TokenTypeOptionName
 
-	// Complex. [Token.IndexEnd] is the index of the terminator
-	// among the tokens of the message (see [Tokenizer.Tokenize]).
+	// Complex. [Token.IndexStart] is an input byte offset; [Token.IndexEnd] is the
+	// terminator's index among this message's tokens (see [Tokenizer.Tokenize]).
 
 	TokenTypePlural        // {arg, plural, ...}
 	TokenTypeSelect        // {arg, select, ...}
 	TokenTypeSelectOrdinal // {arg, selectordinal, ...}
-	TokenTypeOption        // The { ... } that follows an option name.
+	TokenTypeOption        // name { ... } in a select, if name isn't other
 	TokenTypeOptionZero    // zero { ... }
 	TokenTypeOptionOne     // one { ... }
 	TokenTypeOptionTwo     // two { ... }
@@ -68,8 +75,8 @@ const (
 	TokenTypeOptionOther   // other { ... }
 	TokenTypeOptionNumber  // =2 { ... }
 
-	// Terminator. [Token.IndexStart] is the index of the terminated token
-	// among the tokens of the message (see [Tokenizer.Tokenize]).
+	// Terminator. [Token.IndexStart] is the terminated token's index;
+	// [Token.IndexEnd] is the input byte offset after '}' (see [Tokenizer.Tokenize]).
 
 	TokenTypeOptionTerm     // } Terminator of an option
 	TokenTypeComplexArgTerm // } Terminator of a complex argument
@@ -147,13 +154,15 @@ func (t TokenType) String() string {
 	return "unknown"
 }
 
+// Token is part of a message, such as a literal or argument.
 type Token struct {
-	// [Token.IndexStart] and [Token.IndexEnd] have different meaning
-	// depending on [Token.Type]. See the token type groups.
+	// IndexStart and IndexEnd depend on Type; see the token type groups.
 	IndexStart, IndexEnd int
 	Type                 TokenType
 }
 
+// Tokenizer splits messages into tokens. Its zero value is ready to use,
+// but not concurrently.
 type Tokenizer struct {
 	loc    language.Tag
 	plural cldr.PluralRules
@@ -162,17 +171,16 @@ type Tokenizer struct {
 	level  int // The nesting level of the current message.
 }
 
-// maxNestingLevel is the deepest nesting level of an option's message.
-// The main message has level 0. The limit prevents stack overflows and
-// matches MAX_NESTED_LEVELS in ICU's [messagepattern.h].
+// MaxNestingLevel is the deepest option-message level, with the root at 0.
+// It prevents stack overflow and matches MAX_NESTED_LEVELS in [messagepattern.h].
 //
 // [messagepattern.h]: https://github.com/unicode-org/icu/blob/release-78.3/icu4c/source/common/unicode/messagepattern.h
-const maxNestingLevel = 1023
+const MaxNestingLevel = 1023
 
-// Pos returns the last position (byte offset in the input string) the tokenizer was at.
-// That's where Tokenize found an error, or the end of the input if it succeeded.
+// Pos returns Tokenize's error offset, or the input length after success.
 func (t *Tokenizer) Pos() int { return t.pos }
 
+// Errors returned by [Tokenizer.Tokenize]. [Tokenizer.Pos] locates them.
 var (
 	ErrUnclosedQuote         = errors.New("unclosed quote")
 	ErrUnexpectedToken       = errors.New("unexpected token")
@@ -182,6 +190,7 @@ var (
 	ErrExpectBracketOpen     = errors.New("expect opening bracket")
 	ErrExpectBracketClose    = errors.New("expect closing bracket")
 	ErrMissingOptionOther    = errors.New("missing the mandatory 'other' option")
+	ErrInvalidOption         = errors.New("invalid option")
 	ErrDuplicateOption       = errors.New("duplicate option")
 	ErrInvalidArgNumber      = errors.New("invalid argument number")
 	ErrNestingTooDeep        = errors.New("nesting too deep")
@@ -189,8 +198,8 @@ var (
 	ErrUnsupportedPluralRule = errors.New("plural rule unsupported for locale")
 )
 
-// String returns a slice of the input string token t represents.
-// buffer must hold the tokens of s (see Tokenize).
+// String returns the part of s represented by t.
+// buffer must contain s's tokens (see [Tokenizer.Tokenize]).
 func (t Token) String(s string, buffer []Token) string {
 	if t.Type < TokenTypePlural {
 		return s[t.IndexStart:t.IndexEnd] // Literals
@@ -201,25 +210,18 @@ func (t Token) String(s string, buffer []Token) string {
 	return s[t.IndexStart:buffer[t.IndexEnd].IndexEnd] // Complex
 }
 
-// Options returns an iterator iterating over all options of a select,
-// plural or selectordinal token at buffer[tokenIndex].
-// The iterator provides the indexes of option tokens.
-// Returns a no-op iterator if buffer[tokenIndex] is neither of:
-//
-//   - [TokenTypeSelect]
-//   - [TokenTypePlural]
-//   - [TokenTypeSelectOrdinal]
+// Options yields the option-token indexes of the select, plural, or
+// selectordinal at buffer[tokenIndex]. Other token types yield nothing.
 func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 	var endIndex int
 	switch buffer[tokenIndex].Type {
 	case TokenTypeSelect, TokenTypePlural, TokenTypeSelectOrdinal:
 		endIndex = buffer[tokenIndex].IndexEnd
 	default:
-		// Only select, plural and selectordinal can have options.
 		return func(yield func(int) bool) {}
 	}
 	return func(yield func(int) bool) {
-		// +1 To skip the argument name.
+		// Skip the argument name.
 		for ti := tokenIndex + 2; ti < endIndex; {
 			switch buffer[ti].Type {
 			case TokenTypeOption,
@@ -233,8 +235,7 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 				if !yield(ti) {
 					return
 				}
-				// Skip contents, but never back, so that the tokens of more
-				// than one message (see Tokenize) can't make this loop forever.
+				// Never skip backward across separately tokenized messages.
 				ti = max(ti+1, buffer[ti].IndexEnd)
 			default:
 				ti++
@@ -247,12 +248,10 @@ func Options(buffer []Token, tokenIndex int) iter.Seq[int] {
 type OptionsPresencePolicy int8
 
 const (
-	// OptionsPresencePolicyOptional does not require all select options to be present
-	// for the ICU message to be considered complete.
+	// OptionsPresencePolicyOptional permits missing select options.
 	OptionsPresencePolicyOptional OptionsPresencePolicy = iota
 
-	// OptionsPresencePolicyRequired requires all select options to be present
-	// for the ICU message to be considered complete.
+	// OptionsPresencePolicyRequired requires every expected select option.
 	OptionsPresencePolicyRequired
 )
 
@@ -266,22 +265,23 @@ const (
 	OptionUnknownPolicyReject
 )
 
+// SelectOptions returns a select argument's expected options and policies.
+// Options may omit "other"; nil disables policies, while an empty non-nil
+// slice permits only "other".
 type SelectOptions func(argName string) (
 	[]string, OptionsPresencePolicy, OptionUnknownPolicy,
 )
 
-// Tokenize resets the tokenizer and appends the tokens of s to buffer.
-// Tokens link to each other by their index among the tokens of s,
-// so [Token.String], [Options], [Analyze] and [Errors] take the tokens of s
-// on their own, even if buffer wasn't empty:
+// Tokenize resets the tokenizer and appends s's tokens to buffer. Token links
+// use indexes within s's tokens, so pass that subslice to [Token.String],
+// [Options], [Analyze], and [Errors] when buffer was non-empty:
 //
 //	n := len(buffer)
 //	buffer, err = tokenizer.Tokenize(locale, buffer, s)
 //	tokens := buffer[n:] // The tokens of s.
 //
-// If s is not a valid message, Tokenize returns buffer unchanged and an error.
-// [Tokenizer.Pos] tells where the error is. The messages of options can nest
-// at most [maxNestingLevel] levels deep. Deeper nesting fails with [ErrNestingTooDeep].
+// Invalid input returns buffer unchanged; [Tokenizer.Pos] locates the error.
+// Option messages deeper than [MaxNestingLevel] fail with [ErrNestingTooDeep].
 func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
 ) ([]Token, error) {
@@ -292,10 +292,7 @@ func (t *Tokenizer) Tokenize(
 		return buffer, nil
 	}
 	if strings.IndexByte(s, '{') == -1 && strings.IndexByte(s, '}') == -1 {
-		// Fast path for simple inputs.
-		// Without braces there's no quoted text because every syntax character
-		// an apostrophe can quote is a brace or appears only inside braces.
-		// See startsQuote.
+		// Without braces, no apostrophe can quote syntax; see startsQuote.
 		t.pos = len(s)
 		return append(buffer, Token{
 			IndexStart: 0,
@@ -304,14 +301,13 @@ func (t *Tokenizer) Tokenize(
 		}), nil
 	}
 
-	// Tokenize into an empty slice so that the indexes linking tokens
-	// count from the first token of s.
+	// Start links at the first token of s.
 	tokens, err := t.consumeExpr(buffer[len(buffer):], false)
 	if err == nil && t.pos != len(s) {
 		err = ErrUnexpectedToken
 	}
 	if err != nil {
-		// Drop the tokens, which don't all link to each other yet.
+		// Drop partially linked tokens.
 		return buffer, err
 	}
 	if len(buffer) == 0 {
@@ -322,7 +318,7 @@ func (t *Tokenizer) Tokenize(
 
 // consumeExpr consumes a message or sub-message.
 // pluralStyle must be true inside a plural or selectordinal option.
-// See startsQuote.
+// See [startsQuote].
 func (t *Tokenizer) consumeExpr(buffer []Token, pluralStyle bool) ([]Token, error) {
 	var err error
 	for t.pos < len(t.s) {
@@ -344,8 +340,7 @@ func (t *Tokenizer) consumeExpr(buffer []Token, pluralStyle bool) ([]Token, erro
 	return buffer, nil
 }
 
-// indexOfArgNameEnd returns the index of the first rune in s[i:]
-// that is invalid in an ICU argName.
+// indexOfArgNameEnd returns the first invalid ICU argName rune in s[i:].
 func indexOfArgNameEnd(s string, i int) int {
 	for j := i; j < len(s); {
 		r, size := rune(s[j]), 1
@@ -496,12 +491,9 @@ func (t *Tokenizer) consumeArgType() (token Token) {
 	return Token{}
 }
 
-// consumeArgStyle consumes the argStyle of a simple argument.
-// As in [ICU MessageFormat], the style ends before the first '}' that's
-// neither quoted nor closes a '{' within the style, and every apostrophe
-// in it starts or ends quoted text. A custom style is thus a string
-// pattern that may contain any syntax, such as "#,##0.00" or "yyyy-MM-dd".
-// Trailing whitespace isn't part of the style.
+// consumeArgStyle consumes a simple argument's argStyle. As in
+// [ICU MessageFormat], it ends at the first unquoted, unmatched '}'. Every
+// apostrophe toggles quoting, and trailing whitespace is excluded.
 //
 // [ICU MessageFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessageFormat.html
 func (t *Tokenizer) consumeArgStyle() (token Token, err error) {
@@ -590,7 +582,7 @@ func (t *Tokenizer) skipWhitespaces() {
 	}
 }
 
-// consumeSelectArg consumes the part of the select argument after `{name, select,`
+// consumeSelectArg consumes a select after `{name, select`.
 func (t *Tokenizer) consumeSelectArg(
 	buffer []Token, start, startName, endName int,
 ) ([]Token, error) {
@@ -631,12 +623,12 @@ func (t *Tokenizer) consumeSelectArg(
 		}
 	}
 
-	// +2 to skip [select,argName]
+	// Skip the select and its name.
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
 
-	// Link the argument initiator to the argument terminator.
+	// Link the argument to its terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
 	buffer = append(buffer, Token{
 		IndexStart: initiatorBufIndex,
@@ -645,8 +637,6 @@ func (t *Tokenizer) consumeSelectArg(
 	})
 	return buffer, nil
 }
-
-var ErrInvalidOption = errors.New("invalid plural option")
 
 func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	start := t.pos
@@ -683,7 +673,7 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
-	if t.level >= maxNestingLevel {
+	if t.level >= MaxNestingLevel {
 		return buffer, ErrNestingTooDeep
 	}
 	t.pos++ // Consume the opening bracket.
@@ -705,7 +695,7 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	}
 	t.pos++ // Consume closing bracket.
 
-	// Link the argument initiator to the argument terminator.
+	// Link the option to its terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
 	buffer = append(buffer, Token{
 		IndexStart: initiatorBufIndex,
@@ -805,7 +795,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
-	if t.level >= maxNestingLevel {
+	if t.level >= MaxNestingLevel {
 		return buffer, ErrNestingTooDeep
 	}
 	t.pos++ // Consume the opening bracket.
@@ -826,7 +816,7 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 		return buffer, ErrExpectBracketClose
 	}
 
-	// Link the argument initiator to the argument terminator.
+	// Link the option to its terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
 	t.pos++ // Consume closing bracket.
 	buffer = append(buffer, Token{
@@ -838,10 +828,9 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	return buffer, nil
 }
 
-// consumePluralArg consumes the part of a plural or selectordinal argument
-// after `{name, plural` or `{name, selectordinal`. Both have the pluralStyle
-// syntax of [ICU4C MessageFormat]. tp is the token type of the argument,
-// and rules has the plural categories its options may use.
+// consumePluralArg consumes a plural or selectordinal after its type.
+// Both use [ICU4C MessageFormat] pluralStyle syntax. tp identifies the
+// argument and rules limits its plural categories.
 //
 // [ICU4C MessageFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1MessageFormat.html
 func (t *Tokenizer) consumePluralArg(
@@ -868,9 +857,7 @@ func (t *Tokenizer) consumePluralArg(
 		Type:       TokenTypeArgName,
 	})
 
-	// Check for optional "offset" parameter.
-	// The [ICU4C PluralFormat] syntax defines offsetValue = "offset:" number,
-	// so whitespace may follow the colon but not precede it.
+	// [ICU4C PluralFormat] permits whitespace after the offset colon, not before.
 	//
 	// [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
 	if t.isEOF() {
@@ -910,12 +897,12 @@ func (t *Tokenizer) consumePluralArg(
 		}
 	}
 
-	// +2 to skip [plural,argName] or [selectordinal,argName]
+	// Skip the argument and its name.
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
 
-	// Link the argument initiator to the argument terminator.
+	// Link the argument to its terminator.
 	buffer[initiatorBufIndex].IndexEnd = len(buffer)
 	buffer = append(buffer, Token{
 		IndexStart: initiatorBufIndex,
@@ -927,10 +914,8 @@ func (t *Tokenizer) consumePluralArg(
 
 func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) error {
 	var zero, one, two, few, many, other bool
-	// The names of the select options, or the keys of the =n options
-	// (see explicitValueKey), seen so far. The first 8 are searched linearly,
-	// which is faster than a map, and most arguments have no more.
-	// Option contents are skipped because nested arguments may reuse names.
+	// Track select names and normalized =n keys. Search the first eight
+	// linearly; most arguments fit, and this is faster than a map.
 	names := make([]string, 0, 8)
 	var moreNames map[string]struct{} // The names after the first 8.
 	for i := bufIndex; i < len(buffer); i++ {
@@ -1007,17 +992,13 @@ func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) erro
 	return nil
 }
 
-// explicitValueKey returns a key for the =n option named name that's the
-// same for all options with the same value, such as "=1", "=01" and "=1.0".
-// [ICU4C PluralFormat] selects the explicit value that equals the number
-// it formats, so such options are duplicates.
+// explicitValueKey normalizes equal =n values such as "=1", "=01", and
+// "=1.0", which [ICU4C PluralFormat] treats as duplicate options.
 //
 // [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
 func explicitValueKey(name string) string {
 	num := name[1:] // Skip the '='.
-	// Most explicit values are integers that FormatFloat would write the
-	// same way, so their names are keys already. Integers of up to 15 digits
-	// convert to float64 exactly.
+	// Keep common integers unchanged and avoid float conversion.
 	if len(num) <= 15 && (num[0] != '0' || num == "0") && isDigits(num) {
 		return name
 	}
@@ -1028,13 +1009,10 @@ func explicitValueKey(name string) string {
 	return "=" + strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-// isValidArgNumber reports whether s, a string of ASCII digits, is a valid
-// argument number. [ICU4C MessagePattern] requires a small integer without
-// a leading zero. The docs don't define small, but [messagepattern.h] stores
-// the number in an int16, so the largest argument number is 32767.
+// isValidArgNumber reports whether ASCII digits form an ICU argument number:
+// no leading zero and at most int16, as stored by [ICU4C MessagePattern].
 //
 // [ICU4C MessagePattern]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1MessagePattern.html
-// [messagepattern.h]: https://github.com/unicode-org/icu/blob/release-78.3/icu4c/source/common/unicode/messagepattern.h
 func isValidArgNumber(s string) bool {
 	if s[0] == '0' {
 		return s == "0" // No leading zero.
@@ -1059,8 +1037,7 @@ func isDigits(s string) bool {
 	return true
 }
 
-// isWhitespace reports whether r is Pattern_White_Space,
-// which ICU skips between syntax elements.
+// isWhitespace reports ICU's ignorable Pattern_White_Space.
 func isWhitespace(r rune) bool {
 	if r < utf8.RuneSelf {
 		return r == ' ' || ('\t' <= r && r <= '\r')
@@ -1088,9 +1065,7 @@ func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
 	return buffer, nil
 }
 
-// indexOfNumberEnd returns the index of the first byte in s[i:] other than
-// a digit, sign, decimal point or exponent, which ends the number of
-// an explicit value or offset.
+// indexOfNumberEnd finds the end of an explicit value or offset in s[i:].
 func indexOfNumberEnd(s string, i int) int {
 	for ; i < len(s); i++ {
 		switch b := s[i]; {
@@ -1102,10 +1077,8 @@ func indexOfNumberEnd(s string, i int) int {
 	return len(s)
 }
 
-// isNumber reports whether s, which indexOfNumberEnd delimits, is a number
-// such as "1", "01", "-1", "1.5" or "1e3". Explicit values and offsets are
-// numbers in the [ICU4C PluralFormat] syntax, which [ICU4C ChoiceFormat]
-// defines as double values in unlocalized ASCII.
+// isNumber reports whether s is an unlocalized ASCII double accepted by
+// [ICU4C PluralFormat], as defined by [ICU4C ChoiceFormat].
 //
 // [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
 // [ICU4C ChoiceFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1ChoiceFormat.html
@@ -1120,27 +1093,18 @@ func isNumber(s string) bool {
 
 var endOfLiteral = [256]bool{'\'': true, '{': true, '}': true}
 
-// startsQuote reports whether an apostrophe immediately followed by b starts
-// quoted literal text. pluralStyle must be true inside a plural or
-// selectordinal option where '#' is a syntax character.
+// startsQuote reports whether an apostrophe before b starts quoted text.
+// pluralStyle makes '#' syntax in plural and selectordinal options.
 //
-// ICU also quotes '|' inside choice arguments which this tokenizer doesn't support.
+// ICU also quotes '|' in unsupported choice arguments.
 func startsQuote(b byte, pluralStyle bool) bool {
 	return b == '{' || b == '}' || (pluralStyle && b == '#')
 }
 
-// consumeLiteral consumes literal text until the next unquoted '{' or '}'.
-// pluralStyle is passed through to startsQuote.
-//
-// Apostrophes follow ICU's default ApostropheMode.DOUBLE_OPTIONAL:
-//
-//   - A pair of apostrophes is one literal apostrophe, both inside and outside
-//     of quoted text.
-//   - A single apostrophe starts quoted text only where startsQuote allows it.
-//     Everywhere else it's literal text and needs no escaping, as in "aujourd'hui".
-//
-// Unclosed quoted text is rejected with ErrUnclosedQuote.
-// ICU instead auto-quotes it to the end of the message.
+// consumeLiteral stops before the next unquoted brace.
+// It follows ICU's DOUBLE_OPTIONAL apostrophe mode: doubled apostrophes escape one,
+// while a single apostrophe quotes only syntax recognized by startsQuote.
+// Unlike ICU, it rejects unclosed quotes with ErrUnclosedQuote.
 //
 // See https://unicode-org.github.io/icu/userguide/format_parse/messages/#quotingescaping
 // and https://unicode-org.github.io/icu-docs/apidoc/released/icu4j/com/ibm/icu/text/MessagePattern.ApostropheMode.html
@@ -1189,7 +1153,7 @@ func (t *Tokenizer) consumeLiteral(buffer []Token, pluralStyle bool) ([]Token, e
 	CHECK:
 		b := t.s[t.pos]
 		if b == '\'' {
-			// Lookahead for escaped quote
+			// Check for an escaped quote.
 			if t.pos+1 < len(t.s) && t.s[t.pos+1] == '\'' {
 				t.pos += 2 // skip both
 				continue
