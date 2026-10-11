@@ -6,6 +6,7 @@ package icumsg
 import (
 	"errors"
 	"iter"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -174,6 +175,7 @@ var (
 	ErrExpectBracketClose    = errors.New("expect closing bracket")
 	ErrMissingOptionOther    = errors.New("missing the mandatory 'other' option")
 	ErrDuplicateOption       = errors.New("duplicate option")
+	ErrInvalidArgNumber      = errors.New("invalid argument number")
 	ErrInvalidOffset         = errors.New("invalid offset")
 	ErrUnsupportedPluralRule = errors.New("plural rule unsupported for locale")
 )
@@ -362,15 +364,18 @@ func (t *Tokenizer) consumeArgument(buffer []Token) ([]Token, error) {
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
+	name := t.s[startName:endName]
+	if name == "" {
+		return buffer, ErrUnexpectedToken // An argument needs a name.
+	}
+	if isDigits(name) && !isValidArgNumber(name) {
+		t.pos = startName
+		return buffer, ErrInvalidArgNumber
+	}
 	beforeSign := t.pos
 	switch t.s[t.pos] {
 	case '}':
 		// Simple argument.
-
-		if startName == endName {
-			return buffer, ErrUnexpectedToken
-		}
-
 		t.pos++ // Consume the '}'.
 		buffer = append(buffer, Token{
 			IndexStart: start,
@@ -1001,6 +1006,27 @@ func explicitValueKey(name string) string {
 		v = 0 // Make -0 the same key as 0.
 	}
 	return "=" + strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// isValidArgNumber reports whether s, a string of ASCII digits, is a valid
+// argument number. [ICU4C MessagePattern] requires a small integer without
+// a leading zero. The docs don't define small, but [messagepattern.h] stores
+// the number in an int16, so the largest argument number is 32767.
+//
+// [ICU4C MessagePattern]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1MessagePattern.html
+// [messagepattern.h]: https://github.com/unicode-org/icu/blob/release-78.3/icu4c/source/common/unicode/messagepattern.h
+func isValidArgNumber(s string) bool {
+	if s[0] == '0' {
+		return s == "0" // No leading zero.
+	}
+	n := 0
+	for i := range len(s) {
+		n = n*10 + int(s[i]-'0')
+		if n > math.MaxInt16 {
+			return false
+		}
+	}
+	return true
 }
 
 // isDigits reports whether s consists of ASCII digits only.

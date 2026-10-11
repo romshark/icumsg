@@ -251,6 +251,17 @@ func TestTokenize(t *testing.T) {
 		{Str: "arg", Type: icumsg.TokenTypeArgName},
 	}...)
 
+	// Argument numbers, and names that start with a digit
+	f(t, language.English, "{0}{32767, number}{1a}", []Token{
+		{Str: "{0}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "0", Type: icumsg.TokenTypeArgName},
+		{Str: "{32767, number}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "32767", Type: icumsg.TokenTypeArgName},
+		{Str: "number", Type: icumsg.TokenTypeArgTypeNumber},
+		{Str: "{1a}", Type: icumsg.TokenTypeSimpleArg},
+		{Str: "1a", Type: icumsg.TokenTypeArgName},
+	}...)
+
 	// Argument type
 	f(t, language.English, "Before {arg, number} after", []Token{
 		{Str: "Before ", Type: icumsg.TokenTypeLiteral},
@@ -1183,6 +1194,9 @@ var TestsErrors = []TestError{
 	{"prefix }", 7, icumsg.ErrUnexpectedToken},
 	{"prefix } suffix", 7, icumsg.ErrUnexpectedToken},
 	{"{}", 1, icumsg.ErrUnexpectedToken},
+	{"{,number}", 1, icumsg.ErrUnexpectedToken},
+	{"{ , plural, one{# item} other{# items}}", 2, icumsg.ErrUnexpectedToken},
+	{"{,select,other{x}}", 1, icumsg.ErrUnexpectedToken},
 	{"{'}", 1, icumsg.ErrUnexpectedToken},
 	{"{?}", 1, icumsg.ErrUnexpectedToken},
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
@@ -1198,6 +1212,14 @@ var TestsErrors = []TestError{
 	{"{x,plural,other{{}}}", 17, icumsg.ErrUnexpectedToken},
 	{"{n, plural, other{x} }}", 22, icumsg.ErrUnexpectedToken},
 	{"{x, number, ::}", 14, icumsg.ErrUnexpectedToken},
+	// Invalid argument number.
+	{"{00}", 1, icumsg.ErrInvalidArgNumber},
+	{"{01, number}", 1, icumsg.ErrInvalidArgNumber},
+	{"{ 007 }", 2, icumsg.ErrInvalidArgNumber},
+	{"{32768}", 1, icumsg.ErrInvalidArgNumber},
+	{"{32768, plural, other{x}}", 1, icumsg.ErrInvalidArgNumber},
+	{"{99999999999999999999}", 1, icumsg.ErrInvalidArgNumber},
+	{"{x}{01}", 4, icumsg.ErrInvalidArgNumber},
 	// Expected colon.
 	{"{x,plural,offset,", 16, icumsg.ErrExpectedColon},
 	// ICU allows no whitespace before the colon.
