@@ -592,6 +592,51 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
+	{ // Empty options and options with only whitespace
+		full := `{x,select,a{} other{ }}`
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypeSelect},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "a{}", Type: icumsg.TokenTypeOption},
+			{Str: "a", Type: icumsg.TokenTypeOptionName},
+			{Str: "a{}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{ }", Type: icumsg.TokenTypeOptionOther},
+			{Str: " ", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{ }", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+	{ // An option with only a direction mark
+		full := "{x,select,other{\u200e}}"
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypeSelect},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "other{\u200e}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "\u200e", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{\u200e}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+	{ // Empty options in a plural and a nested selectordinal
+		full := `{x,plural,=0{} other{{y,selectordinal,other{}}}}`
+		nested := `{y,selectordinal,other{}}`
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypePlural},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "=0{}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=0", Type: icumsg.TokenTypeOptionName},
+			{Str: "=0{}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{" + nested + "}", Type: icumsg.TokenTypeOptionOther},
+			{Str: nested, Type: icumsg.TokenTypeSelectOrdinal},
+			{Str: "y", Type: icumsg.TokenTypeArgName},
+			{Str: "other{}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "other{}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: nested, Type: icumsg.TokenTypeComplexArgTerm},
+			{Str: "other{" + nested + "}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
 	// Select
 	f(t, language.English, "{x,select,foo{Foo}bar{Bar}other{Other}}", []Token{
 		{
@@ -1180,17 +1225,6 @@ var TestsErrors = []TestError{
 	{"{x_, select, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
 	// Expected closing bracket.
 	{"{n, number foobar}", 11, icumsg.ErrExpectBracketClose},
-	// Empty option.
-	{"{x,plural, other { } }", 17, icumsg.ErrEmptyOption},
-	{"{x,plural, one {x} other {} }", 25, icumsg.ErrEmptyOption},
-	{"{x,selectordinal, one {x} other {} }", 32, icumsg.ErrEmptyOption},
-	{"{x,select, one {x} other {} }", 25, icumsg.ErrEmptyOption},
-	{"{x,select, one {x} other {{y,select,other{}} } }", 41, icumsg.ErrEmptyOption},
-	{"{x,plural, one {x} other {{y,select,other{}} } }", 41, icumsg.ErrEmptyOption},
-	{
-		"{x,selectordinal, one {x} other {{y,select,other{}} } }",
-		48, icumsg.ErrEmptyOption,
-	},
 	// Duplicate option in plural.
 	{"{n, plural, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
@@ -2089,6 +2123,9 @@ func Fuzz(f *testing.F) {
 	f.Add("Very small")
 	f.Add("Good morning {userName}, how are you?")
 	f.Add("{n, plural, offset:1 =0{none} one{# item} other{# items}}")
+	f.Add(
+		"{name}{count, plural, =0{} one{ and one other} other{ and # others}} liked this",
+	)
 	f.Add("{n, selectordinal, offset:-1.5 =1e3{#} other{#}}")
 	f.Add("{n, plural, zero{a} one{b} two{c} few{d} many{e} other{f}}")
 	f.Add("{n, selectordinal, one{#st} two{#nd} few{#rd} other{#th}}")

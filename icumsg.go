@@ -173,7 +173,6 @@ var (
 	ErrExpectBracketOpen     = errors.New("expect opening bracket")
 	ErrExpectBracketClose    = errors.New("expect closing bracket")
 	ErrMissingOptionOther    = errors.New("missing the mandatory 'other' option")
-	ErrEmptyOption           = errors.New("empty option")
 	ErrDuplicateOption       = errors.New("duplicate option")
 	ErrInvalidOffset         = errors.New("invalid offset")
 	ErrUnsupportedPluralRule = errors.New("plural rule unsupported for locale")
@@ -666,24 +665,10 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
-	bracketOpen := t.pos
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
 	t.pos++ // Consume the opening bracket.
-
-	{
-		afterOpeningBracket := t.pos
-		t.skipWhitespaces()
-		if t.isEOF() {
-			return buffer, ErrUnexpectedEOF
-		}
-		if t.s[t.pos] == '}' {
-			t.pos = bracketOpen // Rollback to begin of block.
-			return buffer, ErrEmptyOption
-		}
-		t.pos = afterOpeningBracket // Revert to before the lookahead.
-	}
 
 	var err error
 	// '#' is not a syntax character in a select option.
@@ -797,24 +782,10 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
-	bracketOpen := t.pos
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
 	t.pos++ // Consume the opening bracket.
-
-	{
-		afterOpeningBracket := t.pos
-		t.skipWhitespaces()
-		if t.isEOF() {
-			return buffer, ErrUnexpectedEOF
-		}
-		if t.s[t.pos] == '}' {
-			t.pos = bracketOpen // Rollback to begin of block.
-			return buffer, ErrEmptyOption
-		}
-		t.pos = afterOpeningBracket // Revert to before the lookahead.
-	}
 
 	var err error
 	// '#' is a syntax character in plural and selectordinal options.
