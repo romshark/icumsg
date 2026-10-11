@@ -496,8 +496,8 @@ func TestTokenize(t *testing.T) {
 		},
 	}...)
 
-	{ // Select offset
-		full := `{x,plural,offset:3,other{o}}`
+	{ // Plural offset
+		full := `{x,plural,offset:3 other{o}}`
 		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
@@ -509,8 +509,8 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
-	{ // Select offset zero
-		full := `{x,plural,offset:0,other{o}}`
+	{ // Plural offset zero
+		full := `{x,plural,offset:0 other{o}}`
 		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
@@ -522,8 +522,8 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
-	{ // Select offset no comma
-		full := `{ x , plural , offset : 3 other{o}}`
+	{ // Plural offset with whitespace
+		full := `{ x , plural , offset: 3 other{o}}`
 		f(t, language.English, full, []Token{
 			{Str: full, Type: icumsg.TokenTypePlural},
 			{Str: "x", Type: icumsg.TokenTypeArgName},
@@ -1026,12 +1026,10 @@ var TestsErrors = []TestError{
 	{"{x,selectordinal, other { asd } ", 32, icumsg.ErrUnexpectedEOF},
 	{"{x,selectordinal, other { asd } =", 33, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset", 16, icumsg.ErrUnexpectedEOF},
-	{"{x,plural,offset ", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset:", 17, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset: ", 18, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,offset:1", 18, icumsg.ErrUnexpectedEOF},
-	{"{x,plural,offset:1,", 19, icumsg.ErrUnexpectedEOF},
-	{"{x,plural,offset:1, ", 20, icumsg.ErrUnexpectedEOF},
+	{"{x,plural,offset:1 ", 19, icumsg.ErrUnexpectedEOF},
 	{"{x,plural", 9, icumsg.ErrUnexpectedEOF},
 	{"{x,plural ", 10, icumsg.ErrUnexpectedEOF},
 	{"{x,plural,", 10, icumsg.ErrUnexpectedEOF},
@@ -1053,6 +1051,8 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, offset:0x1 other{foo}}", 19, icumsg.ErrInvalidOption},
 	{"{x,select, other { asd } =1 {x} }", 25, icumsg.ErrInvalidOption},
+	// ICU allows no comma after the offset.
+	{"{x,plural,offset:3,other{o}}", 18, icumsg.ErrInvalidOption},
 	// Unclosed quote.
 	// Every apostrophe below immediately precedes a syntax character.
 	{"prefix '{unclosed quote", 7, icumsg.ErrUnclosedQuote},
@@ -1090,7 +1090,9 @@ var TestsErrors = []TestError{
 	{"{x, number, ::}", 14, icumsg.ErrUnexpectedToken},
 	// Expected colon.
 	{"{x,plural,offset,", 16, icumsg.ErrExpectedColon},
-	{"{x,plural,offset ,", 17, icumsg.ErrExpectedColon},
+	// ICU allows no whitespace before the colon.
+	{"{x,plural,offset ,", 16, icumsg.ErrExpectedColon},
+	{"{ x , plural , offset : 3 other{o}}", 21, icumsg.ErrExpectedColon},
 	// Expected comma.
 	{"{x_, plural: other{x}}", 11, icumsg.ErrExpectedComma},
 	{"{x_, plural | other{x}}", 12, icumsg.ErrExpectedComma},

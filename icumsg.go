@@ -927,12 +927,15 @@ func (t *Tokenizer) consumePluralArg(
 	})
 
 	// Check for optional "offset" parameter.
+	// The [ICU4C PluralFormat] syntax defines offsetValue = "offset:" number,
+	// so whitespace may follow the colon but not precede it.
+	//
+	// [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
 	}
 	if strings.HasPrefix(t.s[t.pos:], "offset") {
 		t.pos += len("offset") // Consume "offset".
-		t.skipWhitespaces()
 		if t.isEOF() {
 			return buffer, ErrUnexpectedEOF
 		}
@@ -946,15 +949,6 @@ func (t *Tokenizer) consumePluralArg(
 		buffer, err = t.consumePluralOffsetNum(buffer)
 		if err != nil {
 			return buffer, err
-		}
-		t.skipWhitespaces()
-
-		if t.isEOF() {
-			return buffer, ErrUnexpectedEOF
-		}
-		if t.s[t.pos] == ',' {
-			t.pos++ // Consume optional comma.
-			t.skipWhitespaces()
 		}
 	}
 	for {
