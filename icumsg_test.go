@@ -1161,6 +1161,19 @@ var TestsErrors = []TestError{
 		icumsg.ErrDuplicateOption},
 	{"{a,plural,=0{{b,plural,=0{ok} other{ok}}} =0{ok} other{ok}}", 42,
 		icumsg.ErrDuplicateOption},
+	// The first option that repeats an earlier name is the duplicate.
+	{"{n, select, a{1} b{1} b{1} a{1} other{1}}", 22, icumsg.ErrDuplicateOption},
+	{"{n, plural, =0{1} one{1} one{1} =0{1} other{1}}", 25, icumsg.ErrDuplicateOption},
+	// Duplicate option after more than 8 select or =n options,
+	// repeating one of the first 8 names or a later one.
+	{"{n, select, a{1} b{1} c{1} d{1} e{1} f{1} g{1} h{1} i{1} a{1} other{1}}", 57,
+		icumsg.ErrDuplicateOption},
+	{"{n, select, a{1} b{1} c{1} d{1} e{1} f{1} g{1} h{1} i{1} j{1} j{1} other{1}}", 62,
+		icumsg.ErrDuplicateOption},
+	{"{n, plural, =0{1} =1{1} =2{1} =3{1} =4{1} =5{1} =6{1} =7{1} =8{1} =0{1} other{1}}", 66,
+		icumsg.ErrDuplicateOption},
+	{"{n, plural, =0{1} =1{1} =2{1} =3{1} =4{1} =5{1} =6{1} =7{1} =8{1} =9{1} =9{1} other{1}}", 72,
+		icumsg.ErrDuplicateOption},
 	// Missing option 'other'.
 	{"prefix {x,plural, }", 7, icumsg.ErrMissingOptionOther},
 	{"prefix {x,select, }", 7, icumsg.ErrMissingOptionOther},
@@ -2169,12 +2182,22 @@ func BenchmarkTokenize(b *testing.B) {
 	var tokenizer icumsg.Tokenizer
 	buffer := make([]icumsg.Token, 0, 64)
 
+	// A select with 1000 options besides other.
+	var manyOptions strings.Builder
+	manyOptions.Grow(len("{n, select,") + 1000*len(" o999{x}") + len(" other{x}}"))
+	manyOptions.WriteString("{n, select,")
+	for i := range 1000 {
+		fmt.Fprintf(&manyOptions, " o%d{x}", i)
+	}
+	manyOptions.WriteString(" other{x}}")
+
 	for _, input := range [...]string{
 		"Very small",
 		"Good morning {userName}, how are you?",
 		ReadFile[string](b, "testdata/lorem_ipsum.txt"),
 		ReadFile[string](b, "testdata/lorem_ipsum_args.icu.txt"),
 		ReadFile[string](b, "testdata/nested.icu.txt"),
+		manyOptions.String(),
 	} {
 		b.Run("", func(b *testing.B) {
 			for b.Loop() {

@@ -6,6 +6,7 @@ package icumsg
 import (
 	"errors"
 	"iter"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -985,78 +986,74 @@ func (t *Tokenizer) consumePluralArg(
 
 func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) error {
 	var zero, one, two, few, many, other bool
+	// The names of the select and =n options seen so far. The first 8 are
+	// searched linearly, which is faster than a map, and most arguments
+	// have no more. Option contents are skipped because nested arguments
+	// may reuse names.
+	names := make([]string, 0, 8)
+	var moreNames map[string]struct{} // The names after the first 8.
 	for i := bufIndex; i < len(buffer); i++ {
-		outer := buffer[i]
-		switch outer.Type {
+		opt := buffer[i]
+		switch opt.Type {
 		case TokenTypeOptionZero:
 			if zero {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			zero = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionOne:
 			if one {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			one = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionTwo:
 			if two {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			two = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionFew:
 			if few {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			few = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionMany:
 			if many {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			many = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionOther:
 			if other {
-				t.pos = outer.IndexStart
+				t.pos = opt.IndexStart
 				return ErrDuplicateOption
 			}
 			other = true
-			i = outer.IndexEnd // Skip contents.
+			i = opt.IndexEnd // Skip contents.
 		case TokenTypeOptionNumber, TokenTypeOption:
 			nameToken := buffer[i+1]
 			name := t.s[nameToken.IndexStart:nameToken.IndexEnd]
-			// Check each other sibling option.
-			// Their contents are skipped because nested arguments may reuse names.
-			for j := bufIndex; j < len(buffer); j++ {
-				inner := buffer[j]
-				switch inner.Type {
-				case TokenTypeOption,
-					TokenTypeOptionZero,
-					TokenTypeOptionOne,
-					TokenTypeOptionTwo,
-					TokenTypeOptionFew,
-					TokenTypeOptionMany,
-					TokenTypeOptionOther,
-					TokenTypeOptionNumber:
-					if j != i && inner.Type == outer.Type {
-						innerName := buffer[j+1]
-						if name == t.s[innerName.IndexStart:innerName.IndexEnd] {
-							t.pos = innerName.IndexStart
-							return ErrDuplicateOption
-						}
-					}
-					j = inner.IndexEnd // Skip contents.
-				}
+			_, dup := moreNames[name]
+			if dup || slices.Contains(names, name) {
+				t.pos = nameToken.IndexStart
+				return ErrDuplicateOption
 			}
-			i = outer.IndexEnd // Skip contents.
+			if len(names) < cap(names) {
+				names = append(names, name)
+			} else {
+				if moreNames == nil {
+					moreNames = make(map[string]struct{})
+				}
+				moreNames[name] = struct{}{}
+			}
+			i = opt.IndexEnd // Skip contents.
 		}
 	}
 	if !other {
