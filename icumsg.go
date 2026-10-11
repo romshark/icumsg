@@ -7,6 +7,7 @@ import (
 	"errors"
 	"iter"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -434,11 +435,13 @@ func (t *Tokenizer) consumeArgument(buffer []Token) ([]Token, error) {
 		case strings.HasPrefix(t.s[t.pos:], "plural"):
 			t.pos += len("plural") // Consume "plural".
 			t.skipWhitespaces()
-			return t.consumePluralArg(buffer, start, startName, endName)
+			return t.consumePluralArg(buffer, start, startName, endName,
+				TokenTypePlural, t.plural.Cardinal)
 		case strings.HasPrefix(t.s[t.pos:], "selectordinal"):
 			t.pos += len("selectordinal") // Consume "selectordinal".
 			t.skipWhitespaces()
-			return t.consumeSelectOrdinalArg(buffer, start, startName, endName)
+			return t.consumePluralArg(buffer, start, startName, endName,
+				TokenTypeSelectOrdinal, t.plural.Ordinal)
 		case strings.HasPrefix(t.s[t.pos:], "select"):
 			t.pos += len("select") // Consume "select".
 			t.skipWhitespaces()
@@ -713,24 +716,15 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	numStart := t.pos
 	if t.s[t.pos] == '=' {
 		t.pos++ // Consume the equal sign.
-		digitsStart := t.pos
-		for {
-			if t.isEOF() {
-				return buffer, ErrUnexpectedEOF
-			}
-			if t.s[t.pos] < '0' || t.s[t.pos] > '9' {
-				break
-			}
-			t.pos++
+		end := indexOfNumberEnd(t.s, t.pos)
+		if end == len(t.s) {
+			t.pos = end
+			return buffer, ErrUnexpectedEOF
 		}
-		if digitsStart == t.pos {
-			return buffer, ErrInvalidOption // '=' not followed by digits.
+		if !isNumber(t.s[t.pos:end]) {
+			return buffer, ErrInvalidOption // '=' not followed by a number.
 		}
-		option := t.s[start:t.pos]
-		if len(option) > 2 && option[1] == '0' {
-			t.pos = start
-			return buffer, ErrInvalidOption // Leading zero is illegal.
-		}
+		t.pos = end
 	} else {
 		for t.pos < len(t.s) {
 			r, size := rune(t.s[t.pos]), 1
@@ -846,65 +840,14 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	return buffer, nil
 }
 
-// consumeSelectOrdinalArg consumes the part of the selectordinal argument
-// after `{name, selectordinal,`
-func (t *Tokenizer) consumeSelectOrdinalArg(
-	buffer []Token, start, startName, endName int,
-) ([]Token, error) {
-	if t.isEOF() {
-		return buffer, ErrUnexpectedEOF
-	}
-	if t.s[t.pos] != ',' {
-		return buffer, ErrExpectedComma
-	}
-	t.pos++ // Consume the comma.
-	t.skipWhitespaces()
-
-	initiatorBufIndex := len(buffer)
-
-	buffer = append(buffer, Token{
-		IndexStart: start,
-		IndexEnd:   0, // This is determined later.
-		Type:       TokenTypeSelectOrdinal,
-	}, Token{
-		IndexStart: startName,
-		IndexEnd:   endName,
-		Type:       TokenTypeArgName,
-	})
-	for {
-		t.skipWhitespaces()
-		if t.isEOF() {
-			return buffer, ErrUnexpectedEOF
-		}
-		if t.s[t.pos] == '}' {
-			t.pos++ // Consume the closing bracket.
-			break
-		}
-
-		var err error
-		buffer, err = t.consumeOptionPlural(buffer, t.plural.Ordinal)
-		if err != nil {
-			return buffer, err
-		}
-	}
-
-	// +2 to skip [selectordinal,argName]
-	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
-		return buffer, err
-	}
-
-	// Link the argument initiator to the argument terminator.
-	buffer[initiatorBufIndex].IndexEnd = len(buffer)
-	buffer = append(buffer, Token{
-		IndexStart: initiatorBufIndex,
-		IndexEnd:   t.pos,
-		Type:       TokenTypeComplexArgTerm,
-	})
-	return buffer, nil
-}
-
+// consumePluralArg consumes the part of a plural or selectordinal argument
+// after `{name, plural` or `{name, selectordinal`. Both have the pluralStyle
+// syntax of [ICU4C MessageFormat]. tp is the token type of the argument,
+// and rules has the plural categories its options may use.
+//
+// [ICU4C MessageFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1MessageFormat.html
 func (t *Tokenizer) consumePluralArg(
-	buffer []Token, start, startName, endName int,
+	buffer []Token, start, startName, endName int, tp TokenType, rules cldr.Rules,
 ) ([]Token, error) {
 	if t.isEOF() {
 		return buffer, ErrUnexpectedEOF
@@ -920,7 +863,7 @@ func (t *Tokenizer) consumePluralArg(
 	buffer = append(buffer, Token{
 		IndexStart: start,
 		IndexEnd:   0, // This is determined later.
-		Type:       TokenTypePlural,
+		Type:       tp,
 	}, Token{
 		IndexStart: startName,
 		IndexEnd:   endName,
@@ -963,13 +906,13 @@ func (t *Tokenizer) consumePluralArg(
 		}
 
 		var err error
-		buffer, err = t.consumeOptionPlural(buffer, t.plural.Cardinal)
+		buffer, err = t.consumeOptionPlural(buffer, rules)
 		if err != nil {
 			return buffer, err
 		}
 	}
 
-	// +2 to skip [plural,argName]
+	// +2 to skip [plural,argName] or [selectordinal,argName]
 	if err := t.validateOptions(buffer, initiatorBufIndex+2, start); err != nil {
 		return buffer, err
 	}
@@ -986,10 +929,10 @@ func (t *Tokenizer) consumePluralArg(
 
 func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) error {
 	var zero, one, two, few, many, other bool
-	// The names of the select and =n options seen so far. The first 8 are
-	// searched linearly, which is faster than a map, and most arguments
-	// have no more. Option contents are skipped because nested arguments
-	// may reuse names.
+	// The names of the select options, or the keys of the =n options
+	// (see explicitValueKey), seen so far. The first 8 are searched linearly,
+	// which is faster than a map, and most arguments have no more.
+	// Option contents are skipped because nested arguments may reuse names.
 	names := make([]string, 0, 8)
 	var moreNames map[string]struct{} // The names after the first 8.
 	for i := bufIndex; i < len(buffer); i++ {
@@ -1040,6 +983,9 @@ func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) erro
 		case TokenTypeOptionNumber, TokenTypeOption:
 			nameToken := buffer[i+1]
 			name := t.s[nameToken.IndexStart:nameToken.IndexEnd]
+			if opt.Type == TokenTypeOptionNumber {
+				name = explicitValueKey(name)
+			}
 			_, dup := moreNames[name]
 			if dup || slices.Contains(names, name) {
 				t.pos = nameToken.IndexStart
@@ -1063,6 +1009,37 @@ func (t *Tokenizer) validateOptions(buffer []Token, bufIndex, startArg int) erro
 	return nil
 }
 
+// explicitValueKey returns a key for the =n option named name that's the
+// same for all options with the same value, such as "=1", "=01" and "=1.0".
+// [ICU4C PluralFormat] selects the explicit value that equals the number
+// it formats, so such options are duplicates.
+//
+// [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
+func explicitValueKey(name string) string {
+	num := name[1:] // Skip the '='.
+	// Most explicit values are integers that FormatFloat would write the
+	// same way, so their names are keys already. Integers of up to 15 digits
+	// convert to float64 exactly.
+	if len(num) <= 15 && (num[0] != '0' || num == "0") && isDigits(num) {
+		return name
+	}
+	v, _ := strconv.ParseFloat(num, 64)
+	if v == 0 {
+		v = 0 // Make -0 the same key as 0.
+	}
+	return "=" + strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// isDigits reports whether s consists of ASCII digits only.
+func isDigits(s string) bool {
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // isWhitespace reports whether r is Pattern_White_Space,
 // which ICU skips between syntax elements.
 func isWhitespace(r rune) bool {
@@ -1075,35 +1052,51 @@ func isWhitespace(r rune) bool {
 func (t *Tokenizer) isEOF() bool { return t.pos >= len(t.s) }
 
 func (t *Tokenizer) consumePluralOffsetNum(buffer []Token) ([]Token, error) {
-	if t.isEOF() {
+	end := indexOfNumberEnd(t.s, t.pos)
+	if end == len(t.s) {
+		t.pos = end
 		return buffer, ErrUnexpectedEOF
 	}
-	start := t.pos
-	if t.s[t.pos] == '0' {
-		t.pos++ // Consume the zero as the number since leading zeros are not allowed.
-		buffer = append(buffer, Token{
-			IndexStart: start,
-			IndexEnd:   t.pos,
-			Type:       TokenTypePluralOffset,
-		})
-		return buffer, nil
+	if !isNumber(t.s[t.pos:end]) {
+		return buffer, ErrInvalidOffset
 	}
-	for ; t.pos < len(t.s); t.pos++ {
-		if t.s[t.pos] < '0' || t.s[t.pos] > '9' {
-			// End of number.
-			if start == t.pos {
-				return buffer, ErrInvalidOffset
-			}
+	buffer = append(buffer, Token{
+		IndexStart: t.pos,
+		IndexEnd:   end,
+		Type:       TokenTypePluralOffset,
+	})
+	t.pos = end
+	return buffer, nil
+}
 
-			buffer = append(buffer, Token{
-				IndexStart: start,
-				IndexEnd:   t.pos,
-				Type:       TokenTypePluralOffset,
-			})
-			break
+// indexOfNumberEnd returns the index of the first byte in s[i:] other than
+// a digit, sign, decimal point or exponent, which ends the number of
+// an explicit value or offset.
+func indexOfNumberEnd(s string, i int) int {
+	for ; i < len(s); i++ {
+		switch b := s[i]; {
+		case '0' <= b && b <= '9', b == '+', b == '-', b == '.', b == 'e', b == 'E':
+		default:
+			return i
 		}
 	}
-	return buffer, nil
+	return len(s)
+}
+
+// isNumber reports whether s, which indexOfNumberEnd delimits, is a number
+// such as "1", "01", "-1", "1.5" or "1e3". Explicit values and offsets are
+// numbers in the [ICU4C PluralFormat] syntax, which [ICU4C ChoiceFormat]
+// defines as double values in unlocalized ASCII.
+//
+// [ICU4C PluralFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1PluralFormat.html
+// [ICU4C ChoiceFormat]: https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/classicu_1_1ChoiceFormat.html
+func isNumber(s string) bool {
+	if s != "" && isDigits(s) {
+		return true // Most numbers are integers, which need no ParseFloat.
+	}
+	_, err := strconv.ParseFloat(s, 64)
+	// Numbers out of range, such as 1e999, round to infinity.
+	return err == nil || errors.Is(err, strconv.ErrRange)
 }
 
 var endOfLiteral = [256]bool{'\'': true, '{': true, '}': true}

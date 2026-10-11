@@ -535,6 +535,63 @@ func TestTokenize(t *testing.T) {
 		}...)
 	}
 
+	{ // Plural offset with a sign, fraction and exponent
+		full := `{x,plural,offset:-1.5e1 other{o}}`
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypePlural},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "-1.5e1", Type: icumsg.TokenTypePluralOffset},
+			{Str: "other{o}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "o", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{o}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
+	{ // Select ordinal offset
+		full := `{x,selectordinal,offset:1 one{#st} other{#th}}`
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypeSelectOrdinal},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "1", Type: icumsg.TokenTypePluralOffset},
+			{Str: "one{#st}", Type: icumsg.TokenTypeOptionOne},
+			{Str: "#st", Type: icumsg.TokenTypeLiteral},
+			{Str: "one{#st}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{#th}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "#th", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{#th}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
+	{ // Explicit values with a sign, fraction, exponent or leading zero
+		full := `{x,plural,=-1{a} =1.5{b} =1e3{c} =01{d} other{e}}`
+		f(t, language.English, full, []Token{
+			{Str: full, Type: icumsg.TokenTypePlural},
+			{Str: "x", Type: icumsg.TokenTypeArgName},
+			{Str: "=-1{a}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=-1", Type: icumsg.TokenTypeOptionName},
+			{Str: "a", Type: icumsg.TokenTypeLiteral},
+			{Str: "=-1{a}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "=1.5{b}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=1.5", Type: icumsg.TokenTypeOptionName},
+			{Str: "b", Type: icumsg.TokenTypeLiteral},
+			{Str: "=1.5{b}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "=1e3{c}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=1e3", Type: icumsg.TokenTypeOptionName},
+			{Str: "c", Type: icumsg.TokenTypeLiteral},
+			{Str: "=1e3{c}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "=01{d}", Type: icumsg.TokenTypeOptionNumber},
+			{Str: "=01", Type: icumsg.TokenTypeOptionName},
+			{Str: "d", Type: icumsg.TokenTypeLiteral},
+			{Str: "=01{d}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: "other{e}", Type: icumsg.TokenTypeOptionOther},
+			{Str: "e", Type: icumsg.TokenTypeLiteral},
+			{Str: "other{e}", Type: icumsg.TokenTypeOptionTerm},
+			{Str: full, Type: icumsg.TokenTypeComplexArgTerm},
+		}...)
+	}
+
 	// Select
 	f(t, language.English, "{x,select,foo{Foo}bar{Bar}other{Other}}", []Token{
 		{
@@ -1045,7 +1102,8 @@ var TestsErrors = []TestError{
 	{"{x,plural, other { asd } =", 26, icumsg.ErrUnexpectedEOF},
 	// Invalid option
 	{"{x,select, other { asd } {x} }", 25, icumsg.ErrInvalidOption},
-	{"{x,plural, other { asd } =01 {x} }", 25, icumsg.ErrInvalidOption},
+	{"{x,plural, other { asd } =1e {x} }", 26, icumsg.ErrInvalidOption},
+	{"{x,plural, other { asd } =1.2.3 {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } =a {x} }", 26, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } ?{x} }", 25, icumsg.ErrInvalidOption},
 	{"{x,plural, other { asd } unknown {x} }", 25, icumsg.ErrInvalidOption},
@@ -1080,6 +1138,8 @@ var TestsErrors = []TestError{
 	{"{n x}", 3, icumsg.ErrUnexpectedToken},
 	{"{n {}}", 3, icumsg.ErrUnexpectedToken},
 	{"{x, unknown}", 4, icumsg.ErrUnexpectedToken},
+	{"{x, NUMBER}", 4, icumsg.ErrUnexpectedToken},
+	{"{x, Plural, other{x}}", 4, icumsg.ErrUnexpectedToken},
 	{"{x: plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
 	{"{x| plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
 	{"{x? plural, other{x}}", 2, icumsg.ErrUnexpectedToken},
@@ -1101,7 +1161,9 @@ var TestsErrors = []TestError{
 	// Invalid offset.
 	{"{x,plural,offset:a", 17, icumsg.ErrInvalidOffset},
 	{"{x,plural,offset:?, other{foo}}", 17, icumsg.ErrInvalidOffset},
-	{"{x,plural,offset:-1, other{foo}}", 17, icumsg.ErrInvalidOffset},
+	{"{x,plural,offset:- other{foo}}", 17, icumsg.ErrInvalidOffset},
+	{"{x,plural,offset:1e3e3 other{foo}}", 17, icumsg.ErrInvalidOffset},
+	{"{n, selectordinal, offset:a other{a}}", 26, icumsg.ErrInvalidOffset},
 	{"{x,plural,offset: , other{foo}}", 18, icumsg.ErrInvalidOffset},
 	// Expected opening bracket.
 	{"{x_, plural, other, one{x} }", 18, icumsg.ErrExpectBracketOpen},
@@ -1134,6 +1196,11 @@ var TestsErrors = []TestError{
 	{"{n, plural, other{a} many{b} many{c}}", 29, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =0{c}}", 27, icumsg.ErrDuplicateOption},
 	{"{n, plural, other{a} =0{b} =1{c} =0{d}}", 33, icumsg.ErrDuplicateOption},
+	// Explicit values written differently are duplicates if they're equal.
+	{"{n, plural, other{a} =1{b} =1.0{c}}", 27, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} =0{b} =-0{c}}", 27, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} =1000{b} =1e3{c}}", 30, icumsg.ErrDuplicateOption},
+	{"{n, plural, other{a} =01{b} =+1.0e0{c}}", 28, icumsg.ErrDuplicateOption},
 	// Duplicate option in selectordinal.
 	{"{n, selectordinal, other{a} other{c}}", 28, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} one{b} other{c}}", 35, icumsg.ErrDuplicateOption},
@@ -1144,6 +1211,7 @@ var TestsErrors = []TestError{
 	{"{n, selectordinal, other{a} many{b} many{c}}", 36, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} =0{b} =0{c}}", 34, icumsg.ErrDuplicateOption},
 	{"{n, selectordinal, other{a} =0{b} =1{c} =0{d}}", 40, icumsg.ErrDuplicateOption},
+	{"{n, selectordinal, other{a} =2{b} =2.0{c}}", 34, icumsg.ErrDuplicateOption},
 	// Duplicate option in select.
 	{"{n, select, other{a} other{c}}", 21, icumsg.ErrDuplicateOption},
 	{"{n, select, other{a} one{b} other{c}}", 28, icumsg.ErrDuplicateOption},
@@ -1999,6 +2067,7 @@ func Fuzz(f *testing.F) {
 	f.Add("Very small")
 	f.Add("Good morning {userName}, how are you?")
 	f.Add("{n, plural, offset:1 =0{none} one{# item} other{# items}}")
+	f.Add("{n, selectordinal, offset:-1.5 =1e3{#} other{#}}")
 	f.Add("{n, plural, zero{a} one{b} two{c} few{d} many{e} other{f}}")
 	f.Add("{n, selectordinal, one{#st} two{#nd} few{#rd} other{#th}}")
 	f.Add("{d, date, yyyy-MM-dd} '{literal}' it's {t, time, h 'o''clock' a}")
@@ -2138,7 +2207,7 @@ func checkOptions(
 	var options []int
 	j := index + 2 // Skip the argument name.
 	if tokens[j].Type == icumsg.TokenTypePluralOffset &&
-		tokens[index].Type == icumsg.TokenTypePlural {
+		tokens[index].Type != icumsg.TokenTypeSelect {
 		j++
 	}
 	for j < term {
