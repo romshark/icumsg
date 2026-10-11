@@ -1352,6 +1352,40 @@ func TestTokenizeErrKeepsBuffer(t *testing.T) {
 	}
 }
 
+func TestTokenizeNestingLimit(t *testing.T) {
+	var tokenizer icumsg.Tokenizer
+	noOptions := func(string) (
+		[]string, icumsg.OptionsPresencePolicy, icumsg.OptionUnknownPolicy,
+	) {
+		return nil, 0, 0
+	}
+	for _, open := range []string{
+		"{a,select,other{", "{n,plural,other{", "{n,selectordinal,other{",
+	} {
+		nest := func(levels int) string {
+			return strings.Repeat(open, levels) + "x" + strings.Repeat("}}", levels)
+		}
+
+		const maxLevel = 1023
+
+		// At the limit, Tokenize, Analyze and Errors succeed.
+		msg := nest(maxLevel)
+		tokens, err := tokenizer.Tokenize(language.English, nil, msg)
+		test.RequireNoErr(t, err, "%s", open)
+		total, err := icumsg.Analyze(language.English, msg, tokens, noOptions,
+			func(int) error { return nil }, func(int, int) error { return nil })
+		test.RequireNoErr(t, err, "%s", open)
+		test.RequireEqual(t, maxLevel, total, "%s", open)
+		for range icumsg.Errors(language.English, msg, tokens, noOptions) {
+		}
+
+		// One level deeper fails at the opening bracket of the option.
+		_, err = tokenizer.Tokenize(language.English, nil, nest(maxLevel+1))
+		test.RequireErrIs(t, icumsg.ErrNestingTooDeep, err, "%s", open)
+		test.RequireEqual(t, (maxLevel+1)*len(open)-1, tokenizer.Pos(), "%s", open)
+	}
+}
+
 func TestOptions(t *testing.T) {
 	var tokenizer icumsg.Tokenizer
 	var buffer []icumsg.Token

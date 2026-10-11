@@ -159,7 +159,15 @@ type Tokenizer struct {
 	plural cldr.PluralRules
 	s      string
 	pos    int
+	level  int // The nesting level of the current message.
 }
+
+// maxNestingLevel is the deepest nesting level of an option's message.
+// The main message has level 0. The limit prevents stack overflows and
+// matches MAX_NESTED_LEVELS in ICU's [messagepattern.h].
+//
+// [messagepattern.h]: https://github.com/unicode-org/icu/blob/release-78.3/icu4c/source/common/unicode/messagepattern.h
+const maxNestingLevel = 1023
 
 // Pos returns the last position (byte offset in the input string) the tokenizer was at.
 // That's where Tokenize found an error, or the end of the input if it succeeded.
@@ -176,6 +184,7 @@ var (
 	ErrMissingOptionOther    = errors.New("missing the mandatory 'other' option")
 	ErrDuplicateOption       = errors.New("duplicate option")
 	ErrInvalidArgNumber      = errors.New("invalid argument number")
+	ErrNestingTooDeep        = errors.New("nesting too deep")
 	ErrInvalidOffset         = errors.New("invalid offset")
 	ErrUnsupportedPluralRule = errors.New("plural rule unsupported for locale")
 )
@@ -271,11 +280,12 @@ type SelectOptions func(argName string) (
 //	tokens := buffer[n:] // The tokens of s.
 //
 // If s is not a valid message, Tokenize returns buffer unchanged and an error.
-// [Tokenizer.Pos] tells where the error is.
+// [Tokenizer.Pos] tells where the error is. The messages of options can nest
+// at most [maxNestingLevel] levels deep. Deeper nesting fails with [ErrNestingTooDeep].
 func (t *Tokenizer) Tokenize(
 	locale language.Tag, buffer []Token, s string,
 ) ([]Token, error) {
-	t.loc, t.s, t.pos = locale, s, 0 // Reset tokenizer.
+	t.loc, t.s, t.pos, t.level = locale, s, 0, 0 // Reset tokenizer.
 	t.plural = cldr.Lookup(t.loc)
 
 	if s == "" {
@@ -673,11 +683,16 @@ func (t *Tokenizer) consumeOption(buffer []Token) ([]Token, error) {
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
+	if t.level >= maxNestingLevel {
+		return buffer, ErrNestingTooDeep
+	}
 	t.pos++ // Consume the opening bracket.
 
 	var err error
 	// '#' is not a syntax character in a select option.
+	t.level++
 	buffer, err = t.consumeExpr(buffer, false)
+	t.level--
 	if err != nil {
 		return buffer, err
 	}
@@ -790,11 +805,16 @@ func (t *Tokenizer) consumeOptionPlural(buffer []Token, f cldr.Rules) ([]Token, 
 	if t.s[t.pos] != '{' {
 		return buffer, ErrExpectBracketOpen
 	}
+	if t.level >= maxNestingLevel {
+		return buffer, ErrNestingTooDeep
+	}
 	t.pos++ // Consume the opening bracket.
 
 	var err error
 	// '#' is a syntax character in plural and selectordinal options.
+	t.level++
 	buffer, err = t.consumeExpr(buffer, true)
+	t.level--
 	if err != nil {
 		return buffer, err
 	}
